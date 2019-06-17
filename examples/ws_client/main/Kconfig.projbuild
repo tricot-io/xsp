@@ -1,0 +1,67 @@
+# Copyright 2019 Tricot Inc.
+# Use of this source code is governed by the license in the LICENSE file.
+
+menu "WS (WebSocket) client example configuration"
+
+config WIFI_SSID
+    string "WiFi SSID"
+	default "myssid"
+	help
+		SSID (network name) of the WiFi network to connect to.
+
+config WIFI_PASSWORD
+    string "WiFi Password"
+	default "mypassword"
+	help
+		WiFi password (WPA or WPA2) for the WiFi network to connect to. Leave blank for no security.
+
+config MAIN_URL
+    string "WebSocket URL to connect to"
+    default "ws://echo.websocket.org"
+    help
+        WebSocket (ws or wss) URL to connect to. Suggested values: "ws://echo.websocket.org",
+        "wss://echo.websocket.org", "ws://broker.hivemq.com:8000/mqtt", "ws://my_address:8080/echo".
+
+config MAIN_SUBPROTOCOLS
+    string "Application subprotocols (blank for none)"
+    default ""
+    help
+        WebSocket application-level subprotocols to request; comma-separated string (with optional
+        spaces), or blank for none. Suggested values: "", "echo", "mqtt".
+
+config MAIN_NUM_SENDS
+    int "Number of messages to send (default: 10)"
+    default 10
+    range 0 1000000000
+    help
+        Number of messages to send.
+
+config MAIN_NUM_DONE_IDLES
+    int "Number of idle periods after sends (default: 100)"
+    default 100
+    range 0 1000000000
+    help
+        Number of idle periods to remain connected after sending messages.
+
+config MAIN_DONE_IDLE_PING_INTERVAL
+    int "Idle ping interval in idle periods (default: 30)"
+    default 30
+    range 1 1000000000
+    help
+        Number of idle periods between which pings will be sent, after sending messages.
+
+config MAIN_IDLE_SLEEP_MS
+    int "Idle sleep time in milliseconds (default: 10)"
+    default 10
+    range 0 1000
+    help
+        Idle sleep time in milliseconds. You shouldn't need to change this, typically.
+
+config MAIN_TRUNC_SIZE
+    int "Message logging truncation size (default: 40)"
+    default 40
+    range 0 200
+    help
+        The number of characters from messages to log.
+
+endmenu

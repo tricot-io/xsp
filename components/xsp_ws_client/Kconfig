@@ -1,0 +1,64 @@
+# Copyright 2019 Tricot Inc.
+# Use of this source code is governed by the license in the LICENSE file.
+
+menu "XSP WS (WebSocket) client"
+
+config XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE
+    int "Write frame buffer size (minimum 4; multiple of 4; default 128)"
+    default 128
+    range 4 65536
+	help
+		The (stack) buffer size for xsp_ws_write_frame().
+
+config XSP_WS_CLIENT_CLOSE_DELAY_MS
+    int "Close delay time in milliseconds (default 100)"
+    default 100
+    range 0 1000
+	help
+		The delay before closing the transport, to allow written data to be sent.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE
+    int "Default maximum frame read size for loop (minimum 125; default 1024)"
+    default 1024
+    range 125 1000000000
+    help
+        The default maximum frame read size for a XSP WS client loop. This is the maximum frame
+        (payload) size that can be accepted.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE
+    int "Default maximum data frame write size for loop (minimum 1; default 1024)"
+    default 1024
+    range 1 1000000000
+    help
+        The default maximum data frame write size for a XSP WS client loop. Larger messages will be
+        fragmented into frames of at most this size.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS
+    int "Default poll read timeout in milliseconds (default 0)"
+    default 0
+    range 0 1000000000
+    help
+        The default poll read timeout for a XSP WS client loop.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS
+    int "Default poll write timeout in milliseconds (default 0)"
+    default 0
+    range 0 1000000000
+    help
+        The default poll write timeout for a XSP WS client loop.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS
+    int "Default read timeout in milliseconds (default 3000)"
+    default 3000
+    range 0 1000000000
+    help
+        The default read timeout for a XSP WS client loop.
+
+config XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS
+    int "Default write timeout in milliseconds (default 3000)"
+    default 3000
+    range 0 1000000000
+    help
+        The default write timeout for a XSP WS client loop.
+
+endmenu
