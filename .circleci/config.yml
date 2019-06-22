@@ -21,9 +21,16 @@ jobs:
       # Sync external deps:
       - run: .circleci/sync_deps.sync
 
-      # CMake:
+      # Build examples/ws_client:
       - run:
           working_directory: examples/ws_client
+          command: |
+            source ~/xsp/.circleci/envsetup.sh
+            idf.py build
+
+      # Build examples/ws_client_test:
+      - run:
+          working_directory: examples/ws_client_test
           command: |
             source ~/xsp/.circleci/envsetup.sh
             idf.py build
