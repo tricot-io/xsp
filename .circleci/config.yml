@@ -18,6 +18,9 @@ jobs:
           - v1-cache-{{ .Revision }}
           - v1-cache-
 
+      # Sync external deps:
+      - run: .circleci/sync_deps.sync
+
       # CMake:
       - run:
           working_directory: examples/ws_client
