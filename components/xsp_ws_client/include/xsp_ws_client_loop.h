@@ -67,32 +67,46 @@ typedef enum xsp_ws_client_loop_event_type {
     XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT
 } xsp_ws_client_loop_event_type_t;
 
+struct xsp_ws_client_loop_event_idle {
+};
+
+struct xsp_ws_client_loop_event_closed {
+    int status;
+};
+
+struct xsp_ws_client_loop_event_data_frame_received {
+    bool fin;
+    xsp_ws_frame_opcode_t opcode;
+    int payload_size;
+    const void* payload;
+};
+
+struct xsp_ws_client_loop_event_ping_received {
+    int payload_size;
+    const void* payload;
+};
+
+struct xsp_ws_client_loop_event_pong_received {
+    int payload_size;
+    const void* payload;
+};
+
+struct xsp_ws_client_loop_event_message_sent {
+    bool success;
+};
+
+union xsp_ws_client_loop_event_data {
+    struct xsp_ws_client_loop_event_idle idle;
+    struct xsp_ws_client_loop_event_closed closed;
+    struct xsp_ws_client_loop_event_data_frame_received data_frame_received;
+    struct xsp_ws_client_loop_event_ping_received ping_received;
+    struct xsp_ws_client_loop_event_pong_received pong_received;
+    struct xsp_ws_client_loop_event_message_sent message_sent;
+} data;
+
 typedef struct xsp_ws_client_loop_event {
     xsp_ws_client_loop_event_type_t type;
-    union xsp_ws_client_loop_event_data {
-        struct xsp_ws_client_loop_event_idle {
-        } idle;
-        struct xsp_ws_client_loop_event_closed {
-            int status;
-        } closed;
-        struct xsp_ws_client_loop_event_data_frame_received {
-            bool fin;
-            xsp_ws_frame_opcode_t opcode;
-            int payload_size;
-            const void* payload;
-        } data_frame_received;
-        struct xsp_ws_client_loop_event_ping_received {
-            int payload_size;
-            const void* payload;
-        } ping_received;
-        struct xsp_ws_client_loop_event_pong_received {
-            int payload_size;
-            const void* payload;
-        } pong_received;
-        struct xsp_ws_client_loop_event_message_sent {
-            bool success;
-        } message_sent;
-    } data;
+    union xsp_ws_client_loop_event_data data;
 } xsp_ws_client_loop_event_t;
 
 typedef void (*xsp_ws_client_loop_event_handler_t)(xsp_ws_client_loop_handle_t loop,
