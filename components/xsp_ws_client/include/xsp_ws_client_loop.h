@@ -32,7 +32,7 @@ extern "C" {
 //         while doing so (for multi-frame messages).
 
 typedef struct xsp_ws_client_loop_config {
-    int max_frame_read_size;  // Must be at least 125.
+    int max_frame_read_size;        // Must be at least 125.
     int max_data_frame_write_size;  // Must be at least 1.
 
     int poll_read_timeout_ms;
@@ -73,14 +73,11 @@ typedef enum xsp_ws_client_loop_event_type {
     XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT
 } xsp_ws_client_loop_event_type_t;
 
-struct xsp_ws_client_loop_event_started {
-};
+struct xsp_ws_client_loop_event_started {};
 
-struct xsp_ws_client_loop_event_stopped {
-};
+struct xsp_ws_client_loop_event_stopped {};
 
-struct xsp_ws_client_loop_event_idle {
-};
+struct xsp_ws_client_loop_event_idle {};
 
 struct xsp_ws_client_loop_event_closed {
     int status;

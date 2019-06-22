@@ -40,7 +40,7 @@ int xsp_ws_client_utf8_validate_state(int start_state, int size, const void* dat
 // TODO(vtl): Possibly we should add "static" when compiling C++.
 inline bool xsp_ws_client_utf8_validate(int size, const void* data) {
     return xsp_ws_client_utf8_validate_state(XSP_WS_CLIENT_UTF8_ACCEPT, size, data) ==
-            XSP_WS_CLIENT_UTF8_ACCEPT;
+           XSP_WS_CLIENT_UTF8_ACCEPT;
 }
 
 #ifdef __cplusplus

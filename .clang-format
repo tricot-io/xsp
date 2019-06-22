@@ -1,0 +1,12 @@
+BasedOnStyle: Chromium
+
+# 4-space indents and 100 columns.
+IndentWidth: 4
+ColumnLimit: 100
+
+# These are specified in spaces.
+ConstructorInitializerIndentWidth: 8
+ContinuationIndentWidth: 8
+
+AccessModifierOffset: -4
+IndentCaseLabels: false
