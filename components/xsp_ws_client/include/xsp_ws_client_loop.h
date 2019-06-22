@@ -45,9 +45,15 @@ typedef struct xsp_ws_client_loop* xsp_ws_client_loop_handle_t;
 
 // WebSocket client loop events.
 typedef enum xsp_ws_client_loop_event_type {
+    // First event generated each time the event loop is run.
+    XSP_WS_CLIENT_LOOP_EVENT_STARTED = 0,
+
+    // Last event generated each time the event loop is run.
+    XSP_WS_CLIENT_LOOP_EVENT_STOPPED,
+
     // Event generated when no work was done.
     // NOTE: To prevent spinning, you may want to briefly sleep on this event.
-    XSP_WS_CLIENT_LOOP_EVENT_IDLE = 0,
+    XSP_WS_CLIENT_LOOP_EVENT_IDLE,
 
     // Event generated when the connection is closed (or failed). The loop will terminate
     // immediately afterwards.
@@ -66,6 +72,12 @@ typedef enum xsp_ws_client_loop_event_type {
     // completed transmission (or the transmission has failed).
     XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT
 } xsp_ws_client_loop_event_type_t;
+
+struct xsp_ws_client_loop_event_started {
+};
+
+struct xsp_ws_client_loop_event_stopped {
+};
 
 struct xsp_ws_client_loop_event_idle {
 };
@@ -96,6 +108,8 @@ struct xsp_ws_client_loop_event_message_sent {
 };
 
 union xsp_ws_client_loop_event_data {
+    struct xsp_ws_client_loop_event_started started;
+    struct xsp_ws_client_loop_event_stopped stopped;
     struct xsp_ws_client_loop_event_idle idle;
     struct xsp_ws_client_loop_event_closed closed;
     struct xsp_ws_client_loop_event_data_frame_received data_frame_received;

@@ -49,6 +49,14 @@ static void loop_event_handler(xsp_ws_client_loop_handle_t loop,
     loop_context_t* ctx = (loop_context_t*)raw_ctx;
 
     switch (evt->type) {
+    case XSP_WS_CLIENT_LOOP_EVENT_STARTED:
+        ESP_LOGI(TAG, "Event: started");
+        break;
+
+    case XSP_WS_CLIENT_LOOP_EVENT_STOPPED:
+        ESP_LOGI(TAG, "Event: stopped");
+        break;
+
     case XSP_WS_CLIENT_LOOP_EVENT_IDLE: {
         ESP_LOGD(TAG, "Event: idle");  // This is super noisy.
         if (ctx->sent >= CONFIG_MAIN_NUM_SENDS) {

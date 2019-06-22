@@ -293,6 +293,11 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
 
     loop->is_running = true;
     loop->should_stop = false;
+    {
+        xsp_ws_client_loop_event_t evt;
+        evt.type = XSP_WS_CLIENT_LOOP_EVENT_STARTED;
+        loop->evt_handler(loop, loop->ctx, &evt);
+    }
     while (!should_stop(loop)) {
         bool did_something = false;
 
@@ -345,6 +350,12 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
         evt.type = XSP_WS_CLIENT_LOOP_EVENT_CLOSED;
         evt.data.closed.status = loop->close_status ? loop->close_status
                                                     : XSP_WS_STATUS_CLOSE_RESERVED_ABNORMAL_CLOSURE;
+        loop->evt_handler(loop, loop->ctx, &evt);
+    }
+
+    {
+        xsp_ws_client_loop_event_t evt;
+        evt.type = XSP_WS_CLIENT_LOOP_EVENT_STOPPED;
         loop->evt_handler(loop, loop->ctx, &evt);
     }
 

@@ -121,6 +121,14 @@ static void do_echo_event_handler(xsp_ws_client_loop_handle_t loop,
     do_echo_context_t* ctx = (do_echo_context_t*)raw_ctx;
 
     switch (evt->type) {
+    case XSP_WS_CLIENT_LOOP_EVENT_STARTED:
+        ESP_LOGD(TAG, "Event: started");
+        break;
+
+    case XSP_WS_CLIENT_LOOP_EVENT_STOPPED:
+        ESP_LOGD(TAG, "Event: stopped");
+        break;
+
     case XSP_WS_CLIENT_LOOP_EVENT_IDLE:
         ESP_LOGD(TAG, "Event: idle");
         do_sleep(CONFIG_MAIN_IDLE_SLEEP_MS);
