@@ -5,10 +5,11 @@
 TOOLCHAIN_FILENAME = 'toolchain.tar.gz'
 TOOLCHAIN_URL = 'https://dl.espressif.com/dl/xtensa-esp32-elf-linux64-1.22.0-80-g6c4433a-5.2.0.tar.gz'
 TOOLCHAIN_SHA256= '3fe96c151d46c1d4e5edc6ed690851b8e53634041114bad04729bc16b0445156'
-got_new = sync_file_from_url('/home/downloads', TOOLCHAIN_FILENAME, TOOLCHAIN_URL, TOOLCHAIN_SHA256)
+got_new = sync_file_from_url('/home/circleci/downloads', TOOLCHAIN_FILENAME, TOOLCHAIN_URL,
+                             TOOLCHAIN_SHA256)
 if got_new or not path_exists('xtensa-esp32-elf'):
-    run_external('rm', '-rf', 'xtensa-esp32-elf')
-    run_external('tar', 'xf', '/home/downloads/'+TOOLCHAIN_FILENAME, cwd='/home/circleci')
+    run_external('rm', '-rf', 'xtensa-esp32-elf', cwd='/home/circleci')
+    run_external('tar', 'xf', 'downloads/'+TOOLCHAIN_FILENAME, cwd='/home/circleci')
 
 # Use our fork of esp-idf; don't do a shallow fetch to help with development.
 add_repo('esp-idf', 'https://github.com/tricot-io/esp-idf.git',
