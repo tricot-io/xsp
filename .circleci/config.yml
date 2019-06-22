@@ -15,8 +15,8 @@ jobs:
       # Restore bazel cache:
       - restore_cache:
           keys:
-          - v1-cache-{{ .Revision }}
-          - v1-cache-
+          - v2-cache-{{ .Revision }}
+          - v2-cache-
 
       # Sync external deps:
       - run: .circleci/sync_deps.sync
@@ -32,6 +32,7 @@ jobs:
       # TODO(vtl): Also cache build directories?
       - save_cache:
           paths:
+            - ~/downloads
             - ~/esp-idf
             - ~/xtensa-esp32-elf
-          key: v1-cache-{{ .Revision }}
+          key: v2-cache-{{ .Revision }}
