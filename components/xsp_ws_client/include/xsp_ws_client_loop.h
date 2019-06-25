@@ -113,7 +113,7 @@ union xsp_ws_client_loop_event_data {
     struct xsp_ws_client_loop_event_ping_received ping_received;
     struct xsp_ws_client_loop_event_pong_received pong_received;
     struct xsp_ws_client_loop_event_message_sent message_sent;
-} data;
+};
 
 typedef struct xsp_ws_client_loop_event {
     xsp_ws_client_loop_event_type_t type;
