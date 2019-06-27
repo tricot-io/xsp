@@ -36,23 +36,22 @@ typedef struct xsp_ws_client_loop {
 
 static const char TAG[] = "WS_CLIENT_LOOP";
 
-#if CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE < 125 ||     \
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE < 1 || \
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS < 0 ||         \
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS < 0 ||        \
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS < 0 ||              \
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS < 0
+#if CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE < 125 ||         \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE < 1 || \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS < 0 ||      \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS < 0 ||     \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS < 0 ||           \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS < 0
 #error "Invalid value for CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_..."
 #endif
 
 const xsp_ws_client_loop_config_t xsp_ws_client_loop_config_default = {
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE,
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE,
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS,
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS,
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS,
-    CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS
-};
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS};
 
 static bool validate_config(const xsp_ws_client_loop_config_t* config) {
     if (!config)
@@ -89,7 +88,7 @@ xsp_ws_client_loop_handle_t xsp_ws_client_loop_init(const xsp_ws_client_loop_con
     }
 
     xsp_ws_client_loop_handle_t loop =
-        (xsp_ws_client_loop_handle_t)malloc(sizeof(xsp_ws_client_loop_t));
+            (xsp_ws_client_loop_handle_t)malloc(sizeof(xsp_ws_client_loop_t));
     if (!loop) {
         ESP_LOGE(TAG, "Allocation failed");
         return NULL;
@@ -152,9 +151,9 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
     bool fin;
     xsp_ws_frame_opcode_t opcode;
     int payload_size;
-    esp_err_t err = xsp_ws_read_frame(loop->client, &fin, &opcode, loop->read_buffer_size,
-                                      loop->read_buffer, &payload_size,
-                                      loop->config.read_timeout_ms);
+    esp_err_t err =
+            xsp_ws_read_frame(loop->client, &fin, &opcode, loop->read_buffer_size,
+                              loop->read_buffer, &payload_size, loop->config.read_timeout_ms);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Read frame failed: %s", esp_err_to_name(err));
         return;
@@ -315,7 +314,7 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
 
         // Check write.
         while (loop->sending_message &&
-                xsp_ws_poll_write(loop->client, loop->config.poll_write_timeout_ms) == ESP_OK) {
+               xsp_ws_poll_write(loop->client, loop->config.poll_write_timeout_ms) == ESP_OK) {
             do_write(loop);
             did_something = true;
         }

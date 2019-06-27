@@ -6,10 +6,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs_flash.h"
 
 #include "xsp_ws_client.h"
@@ -115,10 +115,9 @@ static void loop_event_handler(xsp_ws_client_loop_handle_t loop,
         xsp_ws_frame_opcode_t message_opcode;
         int message_size;
         void* message_data;
-        esp_err_t err = xsp_ws_client_defrag_on_data_frame(ctx->defrag, data->fin, data->opcode,
-                                                           data->payload_size, data->payload, &done,
-                                                           &message_opcode, &message_size,
-                                                           &message_data);
+        esp_err_t err = xsp_ws_client_defrag_on_data_frame(
+                ctx->defrag, data->fin, data->opcode, data->payload_size, data->payload, &done,
+                &message_opcode, &message_size, &message_data);
         if (done) {
             if (err == ESP_OK) {
                 trunc_buf(buf, message_size, message_data);
@@ -183,8 +182,8 @@ static void ws_client_example_task(void* pvParameters) {
         ESP_LOGI(TAG, "Will request subprotocols: %s", kSubprotocols);
 
     xsp_ws_client_config_t client_config = {
-        .url = kUrl,
-        .subprotocols = have_subprotocols ? kSubprotocols : NULL,
+            .url = kUrl,
+            .subprotocols = have_subprotocols ? kSubprotocols : NULL,
     };
     client = xsp_ws_client_init(&client_config);
     if (!client) {
@@ -204,7 +203,7 @@ static void ws_client_example_task(void* pvParameters) {
     }
 
     static const xsp_ws_client_defrag_config_t kDefragConfig = {
-        .max_message_size = 65536,
+            .max_message_size = 65536,
     };
     ctx.defrag = xsp_ws_client_defrag_init(&kDefragConfig);
     if (!ctx.defrag) {

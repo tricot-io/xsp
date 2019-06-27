@@ -19,7 +19,7 @@
 #include "sdkconfig.h"
 
 #if CONFIG_XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE < 4 || \
-    CONFIG_XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE % 4 != 0
+        CONFIG_XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE % 4 != 0
 #error "Invalid value for CONFIG_XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE"
 #endif
 
@@ -172,7 +172,7 @@ static esp_err_t http_event_handler(esp_http_client_event_t* evt) {
     if (!ctx->enabled)
         return ESP_OK;
 
-    switch(evt->event_id) {
+    switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
         ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
         break;
@@ -314,19 +314,19 @@ esp_err_t xsp_ws_client_open(xsp_ws_client_handle_t client) {
     }
 
     http_connection_context_t ctx = {
-        .expected_sec_websocket_accept = expected_sec_websocket_accept,
-        .allow_sec_websocket_protocol = !!client->request_subprotocols,
+            .expected_sec_websocket_accept = expected_sec_websocket_accept,
+            .allow_sec_websocket_protocol = !!client->request_subprotocols,
     };
     esp_http_client_config_t http_config = {
-        .url = client->url,
-        .username = client->username,
-        .password = client->password,
-        .cert_pem = client->cert_pem,
-        .timeout_ms = client->http_timeout_ms,
-        .disable_auto_redirect = client->disable_auto_redirect,
-        .max_redirection_count = client->max_redirection_count,
-        .event_handler = http_event_handler,
-        .user_data = &ctx,
+            .url = client->url,
+            .username = client->username,
+            .password = client->password,
+            .cert_pem = client->cert_pem,
+            .timeout_ms = client->http_timeout_ms,
+            .disable_auto_redirect = client->disable_auto_redirect,
+            .max_redirection_count = client->max_redirection_count,
+            .event_handler = http_event_handler,
+            .user_data = &ctx,
     };
     http_client = esp_http_client_init(&http_config);
     if (!http_client) {
@@ -437,7 +437,7 @@ esp_err_t xsp_ws_client_close(xsp_ws_client_handle_t client) {
         // TODO(vtl): This delay is to try to ensure that everything we wrote gets sent out. Surely
         // there's a better way to do this....
         vTaskDelay((CONFIG_XSP_WS_CLIENT_CLOSE_DELAY_MS + (portTICK_PERIOD_MS - 1)) /
-                portTICK_PERIOD_MS);
+                   portTICK_PERIOD_MS);
         esp_transport_close(client->transport);    // Ignore any error.
         esp_transport_destroy(client->transport);  // Ignore any error.
         client->transport = NULL;
@@ -542,8 +542,8 @@ esp_err_t xsp_ws_write_frame(xsp_ws_client_handle_t client,
     unsigned char write_buf[CONFIG_XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE];
     const unsigned char* src = (const unsigned char*)payload;
     while (payload_size > 0) {
-        int write_size = (payload_size > (int)sizeof(write_buf)) ? (int)sizeof(write_buf)
-                                                                 : payload_size;
+        int write_size =
+                (payload_size > (int)sizeof(write_buf)) ? (int)sizeof(write_buf) : payload_size;
         // TODO(vtl): This could be more efficient; the optimizer probably isn't smart enough to
         // "vectorize".
         for (int i = 0; i < write_size; i++, src++)
@@ -639,7 +639,7 @@ esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
                             int* payload_size,
                             int timeout_ms) {
     if (!client || !fin || !opcode || payload_buffer_size < 0 ||
-            (payload_buffer_size > 0 && !payload_buffer) || !payload_size || timeout_ms < 0) {
+        (payload_buffer_size > 0 && !payload_buffer) || !payload_size || timeout_ms < 0) {
         return ESP_ERR_INVALID_ARG;
     }
     if (!client->transport)
@@ -653,8 +653,8 @@ esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
         client->state = XSP_WS_CLIENT_STATE_FAILED_NO_CLOSE;
         return ESP_FAIL;
     }
-    if ((header1[0] & 0x70) != 0)                    // Reserved bits are set.
-        client->state = XSP_WS_CLIENT_STATE_FAILED;  // But keep going.
+    if ((header1[0] & 0x70) != 0)                                 // Reserved bits are set.
+        client->state = XSP_WS_CLIENT_STATE_FAILED;               // But keep going.
     if (!xsp_ws_is_valid_frame_opcode((int)(header1[0] & 0x0f)))  // Invalid opcode.
         client->state = XSP_WS_CLIENT_STATE_FAILED;               // But keep going.
     xsp_ws_frame_opcode_t opcode_value = (xsp_ws_frame_opcode_t)(header1[0] & 0x0f);
@@ -677,7 +677,7 @@ esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
 
         unsigned char header2[2];
         if (read_data(client, (char*)&header2, (int)sizeof(header2), timeout_ms) !=
-                sizeof(header2)) {
+            sizeof(header2)) {
             client->state = XSP_WS_CLIENT_STATE_FAILED_NO_CLOSE;
             return ESP_FAIL;
         }
@@ -690,17 +690,17 @@ esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
 
         unsigned char header2[8];
         if (read_data(client, (char*)&header2, (int)sizeof(header2), timeout_ms) !=
-                sizeof(header2)) {
+            sizeof(header2)) {
             client->state = XSP_WS_CLIENT_STATE_FAILED_NO_CLOSE;
             return ESP_FAIL;
         }
         if (header2[0] != 0 || header2[1] != 0 || header2[2] != 0 || header2[3] != 0 ||
-                (header2[4] & 0x80) != 0) {  // Too big!
+            (header2[4] & 0x80) != 0) {  // Too big!
             client->state = XSP_WS_CLIENT_STATE_FAILED_NO_CLOSE;
             return ESP_FAIL;
         }
         size = ((int)header2[4] << 24) | ((int)header2[5] << 16) | ((int)header2[6] << 8) |
-                (int)header2[7];
+               (int)header2[7];
         if (size <= 0xffff)                              // Not minimal encoding of size.
             client->state = XSP_WS_CLIENT_STATE_FAILED;  // But keep going.
     }

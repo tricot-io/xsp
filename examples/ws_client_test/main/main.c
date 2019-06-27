@@ -20,10 +20,10 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "nvs_flash.h"
 
 #include "xsp_ws_client.h"
@@ -81,15 +81,15 @@ static void on_message(do_echo_context_t* ctx,
 
     bool binary;
     switch (message_opcode) {
-        case XSP_WS_FRAME_OPCODE_TEXT:
-            binary = false;
-            break;
-        case XSP_WS_FRAME_OPCODE_BINARY:
-            binary = true;
-            break;
-        default:
-            xsp_ws_client_loop_close(loop, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR);
-            return;
+    case XSP_WS_FRAME_OPCODE_TEXT:
+        binary = false;
+        break;
+    case XSP_WS_FRAME_OPCODE_BINARY:
+        binary = true;
+        break;
+    default:
+        xsp_ws_client_loop_close(loop, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR);
+        return;
     }
 
     if (ctx->save_first_msg) {
@@ -147,10 +147,9 @@ static void do_echo_event_handler(xsp_ws_client_loop_handle_t loop,
         xsp_ws_frame_opcode_t message_opcode;
         int message_size;
         void* message_data;
-        esp_err_t err = xsp_ws_client_defrag_on_data_frame(ctx->defrag, data->fin, data->opcode,
-                                                           data->payload_size, data->payload, &done,
-                                                           &message_opcode, &message_size,
-                                                           &message_data);
+        esp_err_t err = xsp_ws_client_defrag_on_data_frame(
+                ctx->defrag, data->fin, data->opcode, data->payload_size, data->payload, &done,
+                &message_opcode, &message_size, &message_data);
         switch (err) {
         case ESP_OK:
             if (done)
@@ -198,10 +197,10 @@ static void do_echo_event_handler(xsp_ws_client_loop_handle_t loop,
 // In save-first-message mode, it just saves the first message (and doesn't echo).
 static void do_echo(const char* url, bool save_first_msg, int* first_msg_size, void** first_msg) {
     xsp_ws_client_defrag_config_t defrag_config = {
-        .max_message_size = 65536,
+            .max_message_size = 65536,
     };
     xsp_ws_client_config_t client_config = {
-        .url = url,
+            .url = url,
     };
     xsp_ws_client_loop_config_t loop_config = xsp_ws_client_loop_config_default;
     loop_config.max_frame_read_size = 65536;
@@ -268,8 +267,8 @@ static void ws_client_testsuite_task(void* pvParameters) {
 
     ESP_LOGI(TAG, "  Updating reports....");
     ESP_LOGI(TAG, "    Free heap: %u.", (unsigned)esp_get_free_heap_size());
-    CHECK(snprintf(url, sizeof(url), "%s/updateReports?agent=xsp_ws_client",
-                   kBaseUrl) < sizeof(url));
+    CHECK(snprintf(url, sizeof(url), "%s/updateReports?agent=xsp_ws_client", kBaseUrl) <
+          sizeof(url));
     do_echo(url, true, NULL, NULL);
     ESP_LOGI(TAG, "    Free heap: %u.", (unsigned)esp_get_free_heap_size());
     ESP_LOGI(TAG, "  Finished reports.");

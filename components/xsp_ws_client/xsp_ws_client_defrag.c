@@ -71,8 +71,9 @@ esp_err_t xsp_ws_client_defrag_on_data_frame(xsp_ws_client_defrag_handle_t defra
                                              xsp_ws_frame_opcode_t* message_opcode,
                                              int* message_size,
                                              void** message_data) {
-    if (!defrag || !xsp_ws_is_data_frame_opcode(opcode) || payload_size < 0 || (payload_size != 0 &&
-            !payload) || !done || !message_opcode || !message_size || !message_data)
+    if (!defrag || !xsp_ws_is_data_frame_opcode(opcode) || payload_size < 0 ||
+        (payload_size != 0 && !payload) || !done || !message_opcode || !message_size ||
+        !message_data)
         return ESP_ERR_INVALID_ARG;
 
     *done = fin;
@@ -80,7 +81,7 @@ esp_err_t xsp_ws_client_defrag_on_data_frame(xsp_ws_client_defrag_handle_t defra
     *message_data = NULL;
 
     if (defrag->message_error != ESP_OK)  // Error state;
-        goto fail;  // Continue returning error until fin.
+        goto fail;                        // Continue returning error until fin.
 
     if (defrag->message_opcode == XSP_WS_FRAME_OPCODE_CONTINUATION) {  // First frame.
         if (opcode == XSP_WS_FRAME_OPCODE_CONTINUATION) {
@@ -97,10 +98,10 @@ esp_err_t xsp_ws_client_defrag_on_data_frame(xsp_ws_client_defrag_handle_t defra
     }
 
     if (defrag->message_opcode == XSP_WS_FRAME_OPCODE_TEXT) {
-        defrag->message_utf8_state = xsp_ws_client_utf8_validate_state(defrag->message_utf8_state ,
+        defrag->message_utf8_state = xsp_ws_client_utf8_validate_state(defrag->message_utf8_state,
                                                                        payload_size, payload);
         if (defrag->message_utf8_state == XSP_WS_CLIENT_UTF8_REJECT ||
-                (fin && defrag->message_utf8_state != XSP_WS_CLIENT_UTF8_ACCEPT)) {
+            (fin && defrag->message_utf8_state != XSP_WS_CLIENT_UTF8_ACCEPT)) {
             defrag->message_error = ESP_ERR_INVALID_RESPONSE;
             goto fail;
         }
