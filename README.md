@@ -5,12 +5,12 @@ ESP32 chip).
 
 ## Requirements
 
-This currently requires a slightly modified ESP-IDF v3.2 from
+This currently requires a slightly modified ESP-IDF v3.2.2 from
 https://github.com/tricot-io/esp-idf:
 
-*   branch: `release/v3.2-tricot`
-*   commit: `c9d82fb2fd6fca2ba0db8bbbb825dfab04a9c033`
-*   tag: `v3.2-tricot1`
+*   branch: `release/v3.2.2-tricot`
+*   commit: `0f361ccd694c0b1ad388990e0efa93ee97fcbbdd`
+*   tag: `v3.2.2-tricot1`
 
 ## Components
 
