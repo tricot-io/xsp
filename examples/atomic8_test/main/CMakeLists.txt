@@ -2,10 +2,11 @@
 # Use of this source code is governed by the license in the LICENSE file.
 
 set(COMPONENT_SRCS
-    app_wifi.c
     main.c
+    verify_stdatomic.c
+    verify_cxx_atomic.cc
 )
 
-set(COMPONENT_ADD_INCLUDEDIRS .)
+set(COMPONENT_ADD_INCLUDEDIRS ".")
 
 register_component()

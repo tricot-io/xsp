@@ -2,10 +2,7 @@
 # Use of this source code is governed by the license in the LICENSE file.
 
 set(COMPONENT_SRCS
-    app_wifi.c
-    main.c
+    xsp_atomic8.c
 )
-
-set(COMPONENT_ADD_INCLUDEDIRS .)
 
 register_component()
