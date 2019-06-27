@@ -21,19 +21,8 @@ jobs:
       # Sync external deps:
       - run: .circleci/sync_deps.sync
 
-      # Build examples/ws_client:
-      - run:
-          working_directory: examples/ws_client
-          command: |
-            source ~/xsp/.circleci/envsetup.sh
-            idf.py build
-
-      # Build examples/ws_client_test:
-      - run:
-          working_directory: examples/ws_client_test
-          command: |
-            source ~/xsp/.circleci/envsetup.sh
-            idf.py build
+      # Build everything:
+      - run: .circleci/build_all.sh
 
       # Save bazel cache:
       # TODO(vtl): Also cache build directories?
