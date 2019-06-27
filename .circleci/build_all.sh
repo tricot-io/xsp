@@ -5,6 +5,7 @@
 # Note: This script assumes that the environment has been set up.
 
 TARGET_DIRS=(
+    examples/atomic8_test
     examples/ws_client
     examples/ws_client_test
 )
