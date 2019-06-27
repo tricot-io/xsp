@@ -22,7 +22,9 @@ jobs:
       - run: .circleci/sync_deps.sync
 
       # Build everything:
-      - run: .circleci/build_all.sh
+      - run: |
+          source .circleci/envsetup.sh
+          .circleci/build_all.sh
 
       # Save bazel cache:
       # TODO(vtl): Also cache build directories?
