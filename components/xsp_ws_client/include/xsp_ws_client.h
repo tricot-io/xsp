@@ -64,6 +64,10 @@ xsp_ws_client_state_t xsp_ws_client_get_state(xsp_ws_client_handle_t client);
 // sent it (and indicates the server rejects all choices provided by the client).
 const char* xsp_ws_client_get_response_subprotocols(xsp_ws_client_handle_t client);
 
+// Returns a file descriptor suitable for use with `select()`, or -1 on error. This may only be
+// called when both reading and writing are permitted.
+int xsp_ws_client_get_select_fd(xsp_ws_client_handle_t client);
+
 // Waits until data can (start to) be written.
 esp_err_t xsp_ws_client_poll_write(xsp_ws_client_handle_t client, int timeout_ms);
 

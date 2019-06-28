@@ -457,6 +457,16 @@ const char* xsp_ws_client_get_response_subprotocols(xsp_ws_client_handle_t clien
     return client->response_subprotocols;
 }
 
+int xsp_ws_client_get_select_fd(xsp_ws_client_handle_t client) {
+    if (!client)
+        return -1;
+    if (!client->transport)
+        return -1;
+    if (!can_read(client->state) || !can_write(client->state))
+        return -1;
+    return esp_transport_get_select_fd(client->transport);
+}
+
 esp_err_t xsp_ws_client_poll_write(xsp_ws_client_handle_t client, int timeout_ms) {
     if (!client || timeout_ms < 0)
         return ESP_ERR_INVALID_ARG;
