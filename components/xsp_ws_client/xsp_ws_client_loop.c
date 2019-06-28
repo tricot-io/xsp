@@ -151,9 +151,9 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
     bool fin;
     xsp_ws_frame_opcode_t opcode;
     int payload_size;
-    esp_err_t err =
-            xsp_ws_read_frame(loop->client, &fin, &opcode, loop->read_buffer_size,
-                              loop->read_buffer, &payload_size, loop->config.read_timeout_ms);
+    esp_err_t err = xsp_ws_client_read_frame(loop->client, &fin, &opcode, loop->read_buffer_size,
+                                             loop->read_buffer, &payload_size,
+                                             loop->config.read_timeout_ms);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Read frame failed: %s", esp_err_to_name(err));
         return;
@@ -179,12 +179,12 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
 
         if (payload_size == 0) {
             loop->close_status = XSP_WS_STATUS_CLOSE_RESERVED_NO_STATUS_RECEIVED;
-            xsp_ws_write_close_frame(loop->client, XSP_WS_STATUS_NONE, NULL,
-                                     loop->config.poll_write_timeout_ms);
+            xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_NONE, NULL,
+                                            loop->config.poll_write_timeout_ms);
         } else if (payload_size == 1) {
             loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
-            xsp_ws_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                     loop->config.poll_write_timeout_ms);
+            xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
+                                            loop->config.poll_write_timeout_ms);
         } else {
             const unsigned char* read_buffer = loop->read_buffer;
             // Record the close status (if it's valid).
@@ -193,18 +193,18 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
                 if (xsp_ws_client_utf8_validate(payload_size - 2, read_buffer + 2)) {
                     loop->close_status = close_status;
                     // Echo the Close frame.
-                    xsp_ws_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE,
-                                       payload_size, loop->read_buffer,
-                                       loop->config.write_timeout_ms);
+                    xsp_ws_client_write_frame(loop->client, true,
+                                              XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE, payload_size,
+                                              loop->read_buffer, loop->config.write_timeout_ms);
                 } else {
                     loop->close_status = XSP_WS_STATUS_CLOSE_INVALID_DATA;
-                    xsp_ws_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_INVALID_DATA, NULL,
-                                             loop->config.poll_write_timeout_ms);
+                    xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_INVALID_DATA,
+                                                    NULL, loop->config.poll_write_timeout_ms);
                 }
             } else {
                 loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
-                xsp_ws_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                         loop->config.poll_write_timeout_ms);
+                xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR,
+                                                NULL, loop->config.poll_write_timeout_ms);
             }
         }
         loop->close_sent = true;
@@ -213,8 +213,8 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
 
     case XSP_WS_FRAME_OPCODE_PING: {
         // Send pong automatically.
-        xsp_ws_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PONG, payload_size,
-                           loop->read_buffer, loop->config.write_timeout_ms);
+        xsp_ws_client_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PONG, payload_size,
+                                  loop->read_buffer, loop->config.write_timeout_ms);
 
         xsp_ws_client_loop_event_t evt;
         evt.type = XSP_WS_CLIENT_LOOP_EVENT_PING_RECEIVED;
@@ -257,8 +257,8 @@ static void do_write(xsp_ws_client_loop_handle_t loop) {
     loop->send_written += write_size;
     bool fin = loop->send_written == loop->send_size;
 
-    esp_err_t err = xsp_ws_write_frame(loop->client, fin, opcode, write_size, payload,
-                                       loop->config.write_timeout_ms);
+    esp_err_t err = xsp_ws_client_write_frame(loop->client, fin, opcode, write_size, payload,
+                                              loop->config.write_timeout_ms);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Write frame failed: %s", esp_err_to_name(err));
         send_message_failed(loop);
@@ -305,7 +305,7 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
         // done (including user stuff).
 
         // Check read.
-        if (xsp_ws_poll_read(loop->client, loop->config.poll_read_timeout_ms) == ESP_OK) {
+        if (xsp_ws_client_poll_read(loop->client, loop->config.poll_read_timeout_ms) == ESP_OK) {
             do_read(loop);
             did_something = true;
         }
@@ -314,7 +314,8 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
 
         // Check write.
         while (loop->sending_message &&
-               xsp_ws_poll_write(loop->client, loop->config.poll_write_timeout_ms) == ESP_OK) {
+               xsp_ws_client_poll_write(loop->client, loop->config.poll_write_timeout_ms) ==
+                       ESP_OK) {
             do_write(loop);
             did_something = true;
         }
@@ -336,8 +337,8 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
     if (!loop->close_sent && xsp_ws_client_get_state(loop->client) == XSP_WS_CLIENT_STATE_FAILED) {
         // TODO(vtl): Currently, the only reason for XSP_WS_CLIENT_STATE_FAILED are protocol errors,
         // but this may change.
-        xsp_ws_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                 loop->config.poll_write_timeout_ms);
+        xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
+                                        loop->config.poll_write_timeout_ms);
         loop->close_sent = true;
         loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
     }
@@ -411,7 +412,8 @@ esp_err_t xsp_ws_client_loop_close(xsp_ws_client_loop_handle_t loop, int close_s
     if (loop->close_sent)
         return ESP_OK;
 
-    xsp_ws_write_close_frame(loop->client, close_status, NULL, loop->config.poll_write_timeout_ms);
+    xsp_ws_client_write_close_frame(loop->client, close_status, NULL,
+                                    loop->config.poll_write_timeout_ms);
     loop->close_sent = true;
     return ESP_OK;
 }
@@ -424,6 +426,6 @@ esp_err_t xsp_ws_client_loop_ping(xsp_ws_client_loop_handle_t loop,
     if (!loop->is_running)
         return ESP_ERR_INVALID_STATE;
 
-    return xsp_ws_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PING, payload_size, payload,
-                              loop->config.write_timeout_ms);
+    return xsp_ws_client_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PING, payload_size,
+                                     payload, loop->config.write_timeout_ms);
 }

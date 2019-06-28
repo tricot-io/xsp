@@ -457,7 +457,7 @@ const char* xsp_ws_client_get_response_subprotocols(xsp_ws_client_handle_t clien
     return client->response_subprotocols;
 }
 
-esp_err_t xsp_ws_poll_write(xsp_ws_client_handle_t client, int timeout_ms) {
+esp_err_t xsp_ws_client_poll_write(xsp_ws_client_handle_t client, int timeout_ms) {
     if (!client || timeout_ms < 0)
         return ESP_ERR_INVALID_ARG;
     if (!client->transport)
@@ -515,12 +515,12 @@ static bool write_frame_header(esp_transport_handle_t transport,
     return esp_transport_write(transport, (const char*)header, size, timeout_ms) == size;
 }
 
-esp_err_t xsp_ws_write_frame(xsp_ws_client_handle_t client,
-                             bool fin,
-                             xsp_ws_frame_opcode_t opcode,
-                             int payload_size,
-                             const void* payload,
-                             int timeout_ms) {
+esp_err_t xsp_ws_client_write_frame(xsp_ws_client_handle_t client,
+                                    bool fin,
+                                    xsp_ws_frame_opcode_t opcode,
+                                    int payload_size,
+                                    const void* payload,
+                                    int timeout_ms) {
     if (!client || payload_size < 0 || (payload_size > 0 && !payload) || timeout_ms < 0)
         return ESP_ERR_INVALID_ARG;
     if (!client->transport)
@@ -561,10 +561,10 @@ esp_err_t xsp_ws_write_frame(xsp_ws_client_handle_t client,
     return ESP_OK;
 }
 
-esp_err_t xsp_ws_write_close_frame(xsp_ws_client_handle_t client,
-                                   int status,
-                                   const char* reason,
-                                   int timeout_ms) {
+esp_err_t xsp_ws_client_write_close_frame(xsp_ws_client_handle_t client,
+                                          int status,
+                                          const char* reason,
+                                          int timeout_ms) {
     size_t reason_size = reason ? strlen(reason) : 0;
     if (status) {
         if (!xsp_ws_is_valid_close_frame_status(status))
@@ -587,11 +587,11 @@ esp_err_t xsp_ws_write_close_frame(xsp_ws_client_handle_t client,
             size += reason_size;
         }
     }
-    return xsp_ws_write_frame(client, true, XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE, size, buf,
-                              timeout_ms);
+    return xsp_ws_client_write_frame(client, true, XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE, size, buf,
+                                     timeout_ms);
 }
 
-esp_err_t xsp_ws_poll_read(xsp_ws_client_handle_t client, int timeout_ms) {
+esp_err_t xsp_ws_client_poll_read(xsp_ws_client_handle_t client, int timeout_ms) {
     if (!client || timeout_ms < 0)
         return ESP_ERR_INVALID_ARG;
     if (!client->transport)
@@ -631,13 +631,13 @@ static int read_data(xsp_ws_client_handle_t client, char* data, int size, int ti
     return size_read;
 }
 
-esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
-                            bool* fin,
-                            xsp_ws_frame_opcode_t* opcode,
-                            int payload_buffer_size,
-                            void* payload_buffer,
-                            int* payload_size,
-                            int timeout_ms) {
+esp_err_t xsp_ws_client_read_frame(xsp_ws_client_handle_t client,
+                                   bool* fin,
+                                   xsp_ws_frame_opcode_t* opcode,
+                                   int payload_buffer_size,
+                                   void* payload_buffer,
+                                   int* payload_size,
+                                   int timeout_ms) {
     if (!client || !fin || !opcode || payload_buffer_size < 0 ||
         (payload_buffer_size > 0 && !payload_buffer) || !payload_size || timeout_ms < 0) {
         return ESP_ERR_INVALID_ARG;

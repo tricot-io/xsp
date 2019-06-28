@@ -65,36 +65,36 @@ xsp_ws_client_state_t xsp_ws_client_get_state(xsp_ws_client_handle_t client);
 const char* xsp_ws_client_get_response_subprotocols(xsp_ws_client_handle_t client);
 
 // Waits until data can (start to) be written.
-esp_err_t xsp_ws_poll_write(xsp_ws_client_handle_t client, int timeout_ms);
+esp_err_t xsp_ws_client_poll_write(xsp_ws_client_handle_t client, int timeout_ms);
 
 // Writes a frame.
 // NOTE: timeout_ms is per-write at the lower layer (i.e., is a timeout for "progress").
-esp_err_t xsp_ws_write_frame(xsp_ws_client_handle_t client,
-                             bool fin,
-                             xsp_ws_frame_opcode_t opcode,
-                             int payload_size,
-                             const void* payload,
-                             int timeout_ms);
+esp_err_t xsp_ws_client_write_frame(xsp_ws_client_handle_t client,
+                                    bool fin,
+                                    xsp_ws_frame_opcode_t opcode,
+                                    int payload_size,
+                                    const void* payload,
+                                    int timeout_ms);
 
 // Writes a Close frame with the given status and (optional) reason. Note that the reason should be
 // valid UTF-8.
-esp_err_t xsp_ws_write_close_frame(xsp_ws_client_handle_t client,
-                                   int status,
-                                   const char* reason,
-                                   int timeout_ms);
+esp_err_t xsp_ws_client_write_close_frame(xsp_ws_client_handle_t client,
+                                          int status,
+                                          const char* reason,
+                                          int timeout_ms);
 
 // Waits until data can (start to) be read.
-esp_err_t xsp_ws_poll_read(xsp_ws_client_handle_t client, int timeout_ms);
+esp_err_t xsp_ws_client_poll_read(xsp_ws_client_handle_t client, int timeout_ms);
 
 // Reads a frame.
 // NOTE: timeout_ms is per-read at the lower layer (i.e., is a timeout for "progress").
-esp_err_t xsp_ws_read_frame(xsp_ws_client_handle_t client,
-                            bool* fin,
-                            xsp_ws_frame_opcode_t* opcode,
-                            int payload_buffer_size,
-                            void* payload_buffer,
-                            int* payload_size,
-                            int timeout_ms);
+esp_err_t xsp_ws_client_read_frame(xsp_ws_client_handle_t client,
+                                   bool* fin,
+                                   xsp_ws_frame_opcode_t* opcode,
+                                   int payload_buffer_size,
+                                   void* payload_buffer,
+                                   int* payload_size,
+                                   int timeout_ms);
 
 #ifdef __cplusplus
 }  // extern "C"

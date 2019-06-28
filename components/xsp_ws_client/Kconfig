@@ -8,7 +8,7 @@ config XSP_WS_CLIENT_WRITE_FRAME_BUFFER_SIZE
     default 128
     range 4 65536
 	help
-		The (stack) buffer size for xsp_ws_write_frame().
+		The (stack) buffer size for xsp_ws_client_write_frame().
 
 config XSP_WS_CLIENT_CLOSE_DELAY_MS
     int "Close delay time in milliseconds (default 100)"
