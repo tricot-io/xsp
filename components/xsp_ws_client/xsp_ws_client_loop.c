@@ -284,6 +284,41 @@ static bool is_closed(xsp_ws_client_loop_handle_t loop) {
     return loop->close_sent || xsp_ws_client_get_state(loop->client) != XSP_WS_CLIENT_STATE_OK;
 }
 
+// Returns true if we should continue.
+static bool do_loop_iteration(xsp_ws_client_loop_handle_t loop) {
+    if (should_stop(loop))
+        return false;
+
+    bool did_something = false;
+
+    // TODO(vtl): Having separate polls for read and write is suboptimal; ideally we'd be able
+    // to do both at once. Even better would be being able to block until there's anything to be
+    // done (including user stuff).
+
+    // Check read.
+    if (xsp_ws_client_poll_read(loop->client, loop->config.poll_read_timeout_ms) == ESP_OK) {
+        do_read(loop);
+        did_something = true;
+    }
+    if (should_stop(loop))
+        return false;
+
+    // Check write.
+    while (loop->sending_message &&
+           xsp_ws_client_poll_write(loop->client, loop->config.poll_write_timeout_ms) == ESP_OK) {
+        do_write(loop);
+        did_something = true;
+    }
+    if (should_stop(loop))
+        return false;
+
+    // Do idle if we didn't read or write.
+    if (!did_something)
+        do_idle(loop);
+
+    return true;
+}
+
 esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
     if (!loop)
         return ESP_ERR_INVALID_ARG;
@@ -297,35 +332,8 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
         evt.type = XSP_WS_CLIENT_LOOP_EVENT_STARTED;
         loop->evt_handler(loop, loop->ctx, &evt);
     }
-    while (!should_stop(loop)) {
-        bool did_something = false;
-
-        // TODO(vtl): Having separate polls for read and write is suboptimal; ideally we'd be able
-        // to do both at once. Even better would be being able to block until there's anything to be
-        // done (including user stuff).
-
-        // Check read.
-        if (xsp_ws_client_poll_read(loop->client, loop->config.poll_read_timeout_ms) == ESP_OK) {
-            do_read(loop);
-            did_something = true;
-        }
-        if (should_stop(loop))
-            break;
-
-        // Check write.
-        while (loop->sending_message &&
-               xsp_ws_client_poll_write(loop->client, loop->config.poll_write_timeout_ms) ==
-                       ESP_OK) {
-            do_write(loop);
-            did_something = true;
-        }
-        if (should_stop(loop))
-            break;
-
-        // Do idle if we didn't read or write.
-        if (!did_something)
-            do_idle(loop);
-    }
+    while (do_loop_iteration(loop))
+        ;  // Nothing.
 
     // NOTE: The repeated (explicit or implicit) calls to xsp_ws_client_get_state() below are
     // intentional: it guards against the possibility that the state changes in between the
