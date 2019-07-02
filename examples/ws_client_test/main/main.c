@@ -256,13 +256,13 @@ static void ws_client_testsuite_task(void* pvParameters) {
     ESP_LOGI(TAG, "  Number of test cases: %d.", num_cases);
 
     for (int case_id = 1; case_id <= num_cases; case_id++) {
-        ESP_LOGI(TAG, "  Starting test case %d....", case_id);
+        ESP_LOGI(TAG, "  Starting test case %d of %d....", case_id, num_cases);
         ESP_LOGI(TAG, "    Free heap: %u.", (unsigned)esp_get_free_heap_size());
         CHECK(snprintf(url, sizeof(url), "%s/runCase?case=%d&agent=xsp_ws_client", kBaseUrl,
                        case_id) < sizeof(url));
         do_echo(url, false, NULL, NULL);
         ESP_LOGI(TAG, "    Free heap: %u.", (unsigned)esp_get_free_heap_size());
-        ESP_LOGI(TAG, "  Finished test case %d.", case_id);
+        ESP_LOGI(TAG, "  Finished test case %d of %d.", case_id, num_cases);
     }
 
     ESP_LOGI(TAG, "  Updating reports....");

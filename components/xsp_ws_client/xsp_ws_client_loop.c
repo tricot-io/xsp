@@ -180,11 +180,11 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
         if (payload_size == 0) {
             loop->close_status = XSP_WS_STATUS_CLOSE_RESERVED_NO_STATUS_RECEIVED;
             xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_NONE, NULL,
-                                            loop->config.poll_write_timeout_ms);
+                                            loop->config.write_timeout_ms);
         } else if (payload_size == 1) {
             loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
             xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                            loop->config.poll_write_timeout_ms);
+                                            loop->config.write_timeout_ms);
         } else {
             const unsigned char* read_buffer = loop->read_buffer;
             // Record the close status (if it's valid).
@@ -199,12 +199,12 @@ static void do_read(xsp_ws_client_loop_handle_t loop) {
                 } else {
                     loop->close_status = XSP_WS_STATUS_CLOSE_INVALID_DATA;
                     xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_INVALID_DATA,
-                                                    NULL, loop->config.poll_write_timeout_ms);
+                                                    NULL, loop->config.write_timeout_ms);
                 }
             } else {
                 loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
                 xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR,
-                                                NULL, loop->config.poll_write_timeout_ms);
+                                                NULL, loop->config.write_timeout_ms);
             }
         }
         loop->close_sent = true;
@@ -421,7 +421,7 @@ esp_err_t xsp_ws_client_loop_close(xsp_ws_client_loop_handle_t loop, int close_s
         return ESP_OK;
 
     xsp_ws_client_write_close_frame(loop->client, close_status, NULL,
-                                    loop->config.poll_write_timeout_ms);
+                                    loop->config.write_timeout_ms);
     loop->close_sent = true;
     return ESP_OK;
 }
