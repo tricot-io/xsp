@@ -346,7 +346,7 @@ esp_err_t xsp_ws_client_loop_run(xsp_ws_client_loop_handle_t loop) {
         // TODO(vtl): Currently, the only reason for XSP_WS_CLIENT_STATE_FAILED are protocol errors,
         // but this may change.
         xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                        loop->config.poll_write_timeout_ms);
+                                        loop->config.write_timeout_ms);
         loop->close_sent = true;
         loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
     }
