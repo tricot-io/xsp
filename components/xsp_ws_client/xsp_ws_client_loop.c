@@ -4,8 +4,11 @@
 #include "xsp_ws_client_loop.h"
 
 #include <stdlib.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #include "esp_log.h"
+#include "esp_transport_utils.h"
 
 #include "xsp_ws_client_utf8.h"
 
@@ -38,8 +41,7 @@ static const char TAG[] = "WS_CLIENT_LOOP";
 
 #if CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE < 125 ||         \
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE < 1 || \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS < 0 ||      \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS < 0 ||     \
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_TIMEOUT_MS < 0 ||           \
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS < 0 ||           \
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS < 0
 #error "Invalid value for CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_..."
@@ -48,8 +50,7 @@ static const char TAG[] = "WS_CLIENT_LOOP";
 const xsp_ws_client_loop_config_t xsp_ws_client_loop_config_default = {
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE,
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_READ_TIMEOUT_MS,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_WRITE_TIMEOUT_MS,
+        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_TIMEOUT_MS,
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS,
         CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS};
 
@@ -60,9 +61,7 @@ static bool validate_config(const xsp_ws_client_loop_config_t* config) {
         return false;
     if (config->max_data_frame_write_size < 1)
         return false;
-    if (config->poll_read_timeout_ms < 0)
-        return false;
-    if (config->poll_write_timeout_ms < 0)
+    if (config->poll_timeout_ms < 0)
         return false;
     if (config->read_timeout_ms < 0)
         return false;
@@ -291,23 +290,43 @@ static bool do_loop_iteration(xsp_ws_client_loop_handle_t loop) {
 
     bool did_something = false;
 
-    // TODO(vtl): Having separate polls for read and write is suboptimal; ideally we'd be able
-    // to do both at once. Even better would be being able to block until there's anything to be
-    // done (including user stuff).
-
-    // Check read.
-    if (xsp_ws_client_poll_read(loop->client, loop->config.poll_read_timeout_ms) == ESP_OK) {
+    // Handle pre-buffered data first, as a special case.
+    if (xsp_ws_client_has_buffered_read_data(loop->client)) {
         do_read(loop);
         did_something = true;
     }
-    if (should_stop(loop))
+
+    // TODO(vtl): We don't need to get the FD each iteration.
+    int fd = xsp_ws_client_get_select_fd(loop->client);
+    if (fd < 0)
         return false;
 
-    // Check write.
-    while (loop->sending_message &&
-           xsp_ws_client_poll_write(loop->client, loop->config.poll_write_timeout_ms) == ESP_OK) {
-        do_write(loop);
-        did_something = true;
+    fd_set read_fds;
+    FD_ZERO(&read_fds);
+    FD_SET(fd, &read_fds);
+    fd_set write_fds;
+    FD_ZERO(&write_fds);
+    if (loop->sending_message)
+        FD_SET(fd, &write_fds);
+
+    // TODO(vtl): We shouldn't have to do this conversion each iteration.
+    struct timeval timeout;
+    esp_transport_utils_ms_to_timeval(loop->config.poll_timeout_ms, &timeout);
+    // TODO(vtl): Possibly, we should check for error (-1) vs timeout (0).
+    if (select(fd + 1, &read_fds, &write_fds, NULL, &timeout) > 0) {
+        if (loop->sending_message && FD_ISSET(fd, &write_fds)) {
+            do_write(loop);
+            // Keep on writing while we need to and can.
+            while (loop->sending_message && select(fd + 1, NULL, &write_fds, NULL, &timeout) > 0)
+                do_write(loop);
+            did_something = true;
+            if (should_stop(loop))
+                return false;
+        }
+        if (FD_ISSET(fd, &read_fds)) {
+            do_read(loop);
+            did_something = true;
+        }
     }
     if (should_stop(loop))
         return false;

@@ -66,7 +66,12 @@ const char* xsp_ws_client_get_response_subprotocols(xsp_ws_client_handle_t clien
 
 // Returns a file descriptor suitable for use with `select()`, or -1 on error. This may only be
 // called when both reading and writing are permitted.
+// WARNING: There may be pre-buffered data to be read which must be checked separately, which would
+// prevent `select()` from working as desired; see `xsp_ws_client_has_buffered_read_data()` below.
 int xsp_ws_client_get_select_fd(xsp_ws_client_handle_t client);
+
+// Returns true if there is pre-buffered data to be read.
+bool xsp_ws_client_has_buffered_read_data(xsp_ws_client_handle_t client);
 
 // Waits until data can (start to) be written.
 esp_err_t xsp_ws_client_poll_write(xsp_ws_client_handle_t client, int timeout_ms);

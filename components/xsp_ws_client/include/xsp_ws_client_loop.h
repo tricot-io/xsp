@@ -35,8 +35,7 @@ typedef struct xsp_ws_client_loop_config {
     int max_frame_read_size;        // Must be at least 125.
     int max_data_frame_write_size;  // Must be at least 1.
 
-    int poll_read_timeout_ms;
-    int poll_write_timeout_ms;
+    int poll_timeout_ms;
     int read_timeout_ms;
     int write_timeout_ms;
 } xsp_ws_client_loop_config_t;
