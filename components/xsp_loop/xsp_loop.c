@@ -6,8 +6,11 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <sys/queue.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #include "esp_log.h"
+#include "esp_transport_utils.h"
 
 #include "sdkconfig.h"
 
@@ -71,6 +74,11 @@ esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {
     if (!loop)
         return ESP_FAIL;
 
+    xsp_loop_fd_watcher_t* fd_watcher;
+    xsp_loop_fd_watcher_t* fd_watcher_temp;
+    SLIST_FOREACH_SAFE(fd_watcher, &loop->fd_watchers_head, fd_watchers, fd_watcher_temp)
+        free(fd_watcher);
+
     free(loop);
     return ESP_OK;
 }
@@ -82,56 +90,70 @@ static bool do_loop_iteration(xsp_loop_handle_t loop) {
 
     bool did_something = false;
 
-#if 0
-    // Handle pre-buffered data first, as a special case.
-    if (xsp_ws_client_has_buffered_read_data(loop->client)) {
-        do_read(loop);
-        did_something = true;
-    }
-
-    // TODO(vtl): We don't need to get the FD each iteration.
-    int fd = xsp_ws_client_get_select_fd(loop->client);
-    if (fd < 0)
-        return false;
-
-    fd_set read_fds;
-    FD_ZERO(&read_fds);
-    FD_SET(fd, &read_fds);
     fd_set write_fds;
+    fd_set read_fds;
     FD_ZERO(&write_fds);
-    if (loop->sending_message)
-        FD_SET(fd, &write_fds);
+    FD_ZERO(&read_fds);
+
+    // First, send notifications that we *will* call select().
+    int max_fd = -1;
+    xsp_loop_fd_watcher_t* fd_watcher;
+    SLIST_FOREACH(fd_watcher, &loop->fd_watchers_head, fd_watchers) {
+        xsp_loop_fd_event_handler_t* feh = &fd_watcher->fd_evt_handler;
+        xsp_loop_fd_watch_for_t watch_for = XSP_LOOP_FD_WATCH_FOR_NONE;
+        if (feh->on_loop_will_select) {
+            watch_for = feh->on_loop_will_select(loop, feh->ctx, feh->fd);
+            if (loop->should_stop)
+                return false;
+        } else {
+            if (feh->on_loop_can_write_fd)
+                watch_for |= XSP_LOOP_FD_WATCH_FOR_WRITE;
+            if (feh->on_loop_can_read_fd)
+                watch_for |= XSP_LOOP_FD_WATCH_FOR_READ;
+        }
+
+        if (watch_for) {
+            if (feh->fd > max_fd)
+                max_fd = feh->fd;
+            if ((watch_for & XSP_LOOP_FD_WATCH_FOR_WRITE))
+                FD_SET(feh->fd, &write_fds);
+            if ((watch_for & XSP_LOOP_FD_WATCH_FOR_READ))
+                FD_SET(feh->fd, &read_fds);
+        }
+    }
 
     // TODO(vtl): We shouldn't have to do this conversion each iteration.
     struct timeval timeout;
     esp_transport_utils_ms_to_timeval(loop->config.poll_timeout_ms, &timeout);
     // TODO(vtl): Possibly, we should check for error (-1) vs timeout (0).
-    if (select(fd + 1, &read_fds, &write_fds, NULL, &timeout) > 0) {
-        if (loop->sending_message && FD_ISSET(fd, &write_fds)) {
-            do_write(loop);
-            // Keep on writing while we need to and can.
-            while (loop->sending_message && select(fd + 1, NULL, &write_fds, NULL, &timeout) > 0)
-                do_write(loop);
-            did_something = true;
-            if (should_stop(loop))
-                return false;
+    if (select(max_fd + 1, &read_fds, &write_fds, NULL, &timeout) > 0) {
+        xsp_loop_fd_watcher_t* fd_watcher;
+        SLIST_FOREACH(fd_watcher, &loop->fd_watchers_head, fd_watchers) {
+            xsp_loop_fd_event_handler_t* feh = &fd_watcher->fd_evt_handler;
+
+            if (FD_ISSET(feh->fd, &write_fds)) {
+                feh->on_loop_can_write_fd(loop, feh->ctx, feh->fd);
+                if (loop->should_stop)
+                    return false;
+            }
+            if (FD_ISSET(feh->fd, &read_fds)) {
+                feh->on_loop_can_read_fd(loop, feh->ctx, feh->fd);
+                if (loop->should_stop)
+                    return false;
+            }
         }
-        if (FD_ISSET(fd, &read_fds)) {
-            do_read(loop);
-            did_something = true;
-        }
+        did_something = true;
     }
-    if (should_stop(loop))
+    if (loop->should_stop)
         return false;
-#endif
 
     // Do idle if nothing happened.
     if (!did_something) {
         if (loop->evt_handler.on_loop_idle)
             loop->evt_handler.on_loop_idle(loop, loop->evt_handler.ctx);
+        if (loop->should_stop)
+            return false;
     }
-    if (loop->should_stop)
-        return false;
 
     return true;
 }
@@ -193,11 +215,3 @@ esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_handle_t loop,
     free(fd_watcher);
     return ESP_OK;
 }
-
-//FIXME
-#if 0
-#include <sys/select.h>
-#include <sys/time.h>
-
-#include "esp_transport_utils.h"
-#endif
