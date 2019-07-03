@@ -79,4 +79,8 @@ xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
 esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_handle_t loop,
                                      xsp_loop_fd_watcher_handle_t fd_watcher);
 
+#ifdef __cplusplus
+}  // extern "C"
+#endif
+
 #endif  // XSP_WS_CLIENT_LOOP_H_
