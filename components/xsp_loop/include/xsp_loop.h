@@ -72,7 +72,8 @@ esp_err_t xsp_loop_stop(xsp_loop_handle_t loop);
 // Adds an file descriptor watcher.
 // WARNING: This must not be called from an FD event handler function.
 xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
-        xsp_loop_handle_t loop, const xsp_loop_fd_event_handler_t* fd_evt_handler);
+        xsp_loop_handle_t loop,
+        const xsp_loop_fd_event_handler_t* fd_evt_handler);
 
 // Removes a file descriptor watcher.
 // WARNING: This must not be called from an FD event handler function.

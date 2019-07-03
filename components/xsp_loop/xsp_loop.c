@@ -76,8 +76,9 @@ esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {
 
     xsp_loop_fd_watcher_t* fd_watcher;
     xsp_loop_fd_watcher_t* fd_watcher_temp;
-    SLIST_FOREACH_SAFE(fd_watcher, &loop->fd_watchers_head, fd_watchers, fd_watcher_temp)
+    SLIST_FOREACH_SAFE(fd_watcher, &loop->fd_watchers_head, fd_watchers, fd_watcher_temp) {
         free(fd_watcher);
+    }
 
     free(loop);
     return ESP_OK;
@@ -188,7 +189,8 @@ esp_err_t xsp_loop_stop(xsp_loop_handle_t loop) {
 }
 
 xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
-        xsp_loop_handle_t loop, const xsp_loop_fd_event_handler_t* fd_evt_handler) {
+        xsp_loop_handle_t loop,
+        const xsp_loop_fd_event_handler_t* fd_evt_handler) {
     if (!loop || !fd_evt_handler ||
         (!fd_evt_handler->on_loop_can_read_fd && !fd_evt_handler->on_loop_can_write_fd) ||
         (fd_evt_handler->fd < 0 || fd_evt_handler->fd >= FD_SETSIZE)) {
