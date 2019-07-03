@@ -62,9 +62,10 @@ esp_err_t xsp_loop_stop(xsp_loop_handle_t loop);
 
 // TODO(vtl)
 xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
-        const xsp_loop_fd_event_handler_t* fd_evt_handler);
+        xsp_loop_handle_t loop, const xsp_loop_fd_event_handler_t* fd_evt_handler);
 
 // TODO(vtl)
-esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_fd_watcher_handle_t fd_watcher);
+esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_handle_t loop,
+                                     xsp_loop_fd_watcher_handle_t fd_watcher);
 
 #endif  // XSP_WS_CLIENT_LOOP_H_

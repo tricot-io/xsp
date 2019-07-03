@@ -5,10 +5,16 @@
 
 #include <stdbool.h>
 #include <stdlib.h>
+#include <sys/queue.h>
 
 #include "esp_log.h"
 
 #include "sdkconfig.h"
+
+typedef struct xsp_loop_fd_watcher {
+    xsp_loop_fd_event_handler_t fd_evt_handler;
+    SLIST_ENTRY(xsp_loop_fd_watcher) fd_watchers;
+} xsp_loop_fd_watcher_t;
 
 typedef struct xsp_loop {
     xsp_loop_config_t config;
@@ -16,6 +22,8 @@ typedef struct xsp_loop {
 
     bool is_running;
     bool should_stop;
+
+    SLIST_HEAD(fd_watchers_head, xsp_loop_fd_watcher) fd_watchers_head;
 } xsp_loop_t;
 
 static const char TAG[] = "LOOP";
@@ -53,6 +61,8 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
     loop->config = *config;
     if (evt_handler)
         loop->evt_handler = *evt_handler;
+
+    SLIST_INIT(&loop->fd_watchers_head);
 
     return loop;
 }
@@ -156,14 +166,32 @@ esp_err_t xsp_loop_stop(xsp_loop_handle_t loop) {
 }
 
 xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
-        const xsp_loop_fd_event_handler_t* fd_evt_handler) {
-    // TODO(vtl)
-    return NULL;
+        xsp_loop_handle_t loop, const xsp_loop_fd_event_handler_t* fd_evt_handler) {
+    if (!loop || !fd_evt_handler ||
+        (!fd_evt_handler->on_loop_can_read_fd && !fd_evt_handler->on_loop_can_write_fd) ||
+        (fd_evt_handler->fd < 0 || fd_evt_handler->fd >= FD_SETSIZE)) {
+        ESP_LOGE(TAG, "Invalid argument");
+        return NULL;
+    }
+
+    xsp_loop_fd_watcher_handle_t fd_watcher =
+            (xsp_loop_fd_watcher_handle_t)malloc(sizeof(xsp_loop_fd_watcher_t));
+    if (!fd_watcher) {
+        ESP_LOGE(TAG, "Allocation failed");
+        return NULL;
+    }
+    fd_watcher->fd_evt_handler = *fd_evt_handler;
+    SLIST_INSERT_HEAD(&loop->fd_watchers_head, fd_watcher, fd_watchers);
+    return fd_watcher;
 }
 
-esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_fd_watcher_handle_t fd_watcher) {
-    // TODO(vtl)
-    return ESP_FAIL;
+esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_handle_t loop,
+                                     xsp_loop_fd_watcher_handle_t fd_watcher) {
+    if (!loop || !fd_watcher)
+        return ESP_ERR_INVALID_ARG;
+    SLIST_REMOVE(&loop->fd_watchers_head, fd_watcher, xsp_loop_fd_watcher, fd_watchers);
+    free(fd_watcher);
+    return ESP_OK;
 }
 
 //FIXME
