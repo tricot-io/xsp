@@ -13,7 +13,6 @@
 typedef struct xsp_loop {
     xsp_loop_config_t config;
     xsp_loop_event_handler_t evt_handler;
-    void* ctx;
 
     bool is_running;
     bool should_stop;
@@ -36,8 +35,7 @@ static bool validate_config(const xsp_loop_config_t* config) {
 }
 
 xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
-                                const xsp_loop_event_handler_t* evt_handler,
-                                void* ctx) {
+                                const xsp_loop_event_handler_t* evt_handler) {
     if (!config)
         config = &xsp_loop_config_default;
 
@@ -55,7 +53,6 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
     loop->config = *config;
     if (evt_handler)
         loop->evt_handler = *evt_handler;
-    loop->ctx = ctx;
 
     return loop;
 }
@@ -121,7 +118,7 @@ static bool do_loop_iteration(xsp_loop_handle_t loop) {
     // Do idle if nothing happened.
     if (!did_something) {
         if (loop->evt_handler.on_loop_idle)
-            loop->evt_handler.on_loop_idle(loop, loop->ctx);
+            loop->evt_handler.on_loop_idle(loop, loop->evt_handler.ctx);
     }
     if (loop->should_stop)
         return false;
@@ -138,11 +135,11 @@ esp_err_t xsp_loop_run(xsp_loop_handle_t loop) {
     loop->is_running = true;
     loop->should_stop = false;
     if (loop->evt_handler.on_loop_start)
-        loop->evt_handler.on_loop_start(loop, loop->ctx);
+        loop->evt_handler.on_loop_start(loop, loop->evt_handler.ctx);
     while (do_loop_iteration(loop))
         ;  // Nothing.
     if (loop->evt_handler.on_loop_stop)
-        loop->evt_handler.on_loop_stop(loop, loop->ctx);
+        loop->evt_handler.on_loop_stop(loop, loop->evt_handler.ctx);
     loop->is_running = false;
 
     return ESP_OK;

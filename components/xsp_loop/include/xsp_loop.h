@@ -24,15 +24,21 @@ typedef struct xsp_loop_event_handler {
     on_loop_start_func_t on_loop_start;
     on_loop_stop_func_t on_loop_stop;
     on_loop_idle_func_t on_loop_idle;
+    void* ctx;
 } xsp_loop_event_handler_t;
+
+/*
+typedef struct xsp_loop_fd_watcher {
+    on_loop_will_select_func_t o
+} xsp_loop_fd_watcher_t;
+*/
 
 // Default configuration.
 extern const xsp_loop_config_t xsp_loop_config_default;
 
 // Initializes loop.
 xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
-                                const xsp_loop_event_handler_t* evt_handler,
-                                void* ctx);
+                                const xsp_loop_event_handler_t* evt_handler);
 
 // Cleans up (shuts down) the loop, which must not be running.
 esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop);
