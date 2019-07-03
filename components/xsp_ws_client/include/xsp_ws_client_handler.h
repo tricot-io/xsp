@@ -6,10 +6,10 @@
 
 #include <stdbool.h>
 
-//FIXME
-//#include "esp_err.h"
+#include "esp_err.h"
 
-//#include "xsp_ws_client.h"
+#include "xsp_loop.h"
+#include "xsp_ws_client.h"
 #include "xsp_ws_client_types.h"
 
 #ifdef __cplusplus
@@ -67,7 +67,20 @@ typedef struct xsp_ws_client_event_handler {
     void* ctx;
 } xsp_ws_client_event_handler_t;
 
-/*
+// Default configuration.
+extern const xsp_ws_client_handler_config_t xsp_ws_client_handler_config_default;
+
+// Initializes the WebSocket client handler; doesn't take ownership of the client or the loop, and
+// both should remain valid for the lifetime of the handler. The client must already be connected.
+xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
+        const xsp_ws_client_handler_config_t* config,
+        const xsp_ws_client_event_handler_t* evt_handler,
+        xsp_ws_client_handle_t client,
+        xsp_loop_handle_t loop);
+
+
+
+
 // NOTES
 //
 // *   The loop receives *frames* and provides them to the user (to be defragmented into messages if
@@ -83,10 +96,6 @@ typedef struct xsp_ws_client_event_handler {
 // *   It sends messages asynchronously.
 //     *   This allows larger messages to be sent without blocking, and frames to be received
 //         while doing so (for multi-frame messages).
-
-// Default configuration.
-extern const xsp_ws_client_loop_config_t xsp_ws_client_loop_config_default;
-*/
 
 /*
 // Initializes the WebSocket client loop; doesn't take ownership of the client: `client` should

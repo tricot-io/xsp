@@ -34,24 +34,54 @@ config XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE
         fragmented into frames of at most this size.
 
 config XSP_WS_CLIENT_LOOP_DEFAULT_POLL_TIMEOUT_MS
-    int "Default poll timeout in milliseconds (default 0)"
+    int "Default poll timeout in milliseconds for loop (default 0)"
     default 0
     range 0 1000000000
     help
         The default poll timeout for a XSP WS client loop.
 
 config XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS
-    int "Default read timeout in milliseconds (default 3000)"
+    int "Default read timeout in milliseconds for loop (default 3000)"
     default 3000
     range 0 1000000000
     help
         The default read timeout for a XSP WS client loop.
 
 config XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS
-    int "Default write timeout in milliseconds (default 3000)"
+    int "Default write timeout in milliseconds for loop (default 3000)"
     default 3000
     range 0 1000000000
     help
         The default write timeout for a XSP WS client loop.
+
+config XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_FRAME_READ_SIZE
+    int "Default maximum frame read size for handler (minimum 125; default 1024)"
+    default 1024
+    range 125 1000000000
+    help
+        The default maximum frame read size for a XSP WS client handler. This is the maximum frame
+        (payload) size that can be accepted.
+
+config XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE
+    int "Default maximum data frame write size for handler (minimum 1; default 1024)"
+    default 1024
+    range 1 1000000000
+    help
+        The default maximum data frame write size for a XSP WS client handler. Larger messages will
+        be fragmented into frames of at most this size.
+
+config XSP_WS_CLIENT_HANDLER_DEFAULT_READ_TIMEOUT_MS
+    int "Default read timeout in milliseconds for handler (default 3000)"
+    default 3000
+    range 0 1000000000
+    help
+        The default read timeout for a XSP WS client handler.
+
+config XSP_WS_CLIENT_HANDLER_DEFAULT_WRITE_TIMEOUT_MS
+    int "Default write timeout in milliseconds for handler (default 3000)"
+    default 3000
+    range 0 1000000000
+    help
+        The default write timeout for a XSP WS client handler.
 
 endmenu

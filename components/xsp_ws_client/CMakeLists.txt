@@ -13,6 +13,7 @@ set(COMPONENT_SRCS
 set(COMPONENT_REQUIRES
     esp_http_client
     tcp_transport
+    xsp_loop
 )
 
 set(COMPONENT_ADD_INCLUDEDIRS include)

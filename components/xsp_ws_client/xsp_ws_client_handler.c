@@ -3,23 +3,21 @@
 
 #include "xsp_ws_client_handler.h"
 
-#if 0
 #include <stdlib.h>
-#include <sys/select.h>
-#include <sys/time.h>
 
 #include "esp_log.h"
-#include "esp_transport_utils.h"
 
 #include "xsp_ws_client_utf8.h"
 
 #include "sdkconfig.h"
 
-typedef struct xsp_ws_client_loop {
-    xsp_ws_client_loop_config_t config;
+typedef struct xsp_ws_client_handler {
+    xsp_ws_client_handler_config_t config;
+    xsp_ws_client_event_handler_t evt_handler;
     xsp_ws_client_handle_t client;
-    xsp_ws_client_loop_event_handler_t evt_handler;
-    void* ctx;
+    xsp_loop_handle_t loop;
+
+    xsp_loop_fd_watcher_handle_t fd_watcher;
 
     void* read_buffer;
     int read_buffer_size;
@@ -33,36 +31,29 @@ typedef struct xsp_ws_client_loop {
     const void* send_message;  // Only valid when sending message. Not owned by us.
     int send_size;             // Only valid when sending message.
     int send_written;          // Only valid when sending message.
+} xsp_ws_client_handler_t;
 
-    bool is_running;
-    bool should_stop;
-} xsp_ws_client_loop_t;
+static const char TAG[] = "WS_CLIENT_HANDLER";
 
-static const char TAG[] = "WS_CLIENT_LOOP";
-
-#if CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE < 125 ||         \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE < 1 || \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_TIMEOUT_MS < 0 ||           \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS < 0 ||           \
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS < 0
-#error "Invalid value for CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_..."
+#if CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_FRAME_READ_SIZE < 125 ||         \
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE < 1 || \
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_READ_TIMEOUT_MS < 0 ||           \
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_WRITE_TIMEOUT_MS < 0
+#error "Invalid value for CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_..."
 #endif
 
-const xsp_ws_client_loop_config_t xsp_ws_client_loop_config_default = {
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_FRAME_READ_SIZE,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_POLL_TIMEOUT_MS,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_READ_TIMEOUT_MS,
-        CONFIG_XSP_WS_CLIENT_LOOP_DEFAULT_WRITE_TIMEOUT_MS};
+const xsp_ws_client_handler_config_t xsp_ws_client_handler_config_default = {
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_FRAME_READ_SIZE,
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_MAX_DATA_FRAME_WRITE_SIZE,
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_READ_TIMEOUT_MS,
+        CONFIG_XSP_WS_CLIENT_HANDLER_DEFAULT_WRITE_TIMEOUT_MS};
 
-static bool validate_config(const xsp_ws_client_loop_config_t* config) {
+static bool validate_config(const xsp_ws_client_handler_config_t* config) {
     if (!config)
         return true;
     if (config->max_frame_read_size < 125)
         return false;
     if (config->max_data_frame_write_size < 1)
-        return false;
-    if (config->poll_timeout_ms < 0)
         return false;
     if (config->read_timeout_ms < 0)
         return false;
@@ -71,53 +62,86 @@ static bool validate_config(const xsp_ws_client_loop_config_t* config) {
     return true;
 }
 
-xsp_ws_client_loop_handle_t xsp_ws_client_loop_init(const xsp_ws_client_loop_config_t* config,
-                                                    xsp_ws_client_handle_t client,
-                                                    xsp_ws_client_loop_event_handler_t evt_handler,
-                                                    void* ctx) {
+static xsp_loop_fd_watch_for_t on_loop_will_select(xsp_loop_handle_t loop, void* ctx, int fd) {
+//FIXME
+return XSP_LOOP_FD_WATCH_FOR_NONE;
+}
+
+static void on_loop_can_read_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
+//FIXME
+}
+
+static void on_loop_can_write_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
+//FIXME
+}
+
+xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
+        const xsp_ws_client_handler_config_t* config,
+        const xsp_ws_client_event_handler_t* evt_handler,
+        xsp_ws_client_handle_t client,
+        xsp_loop_handle_t loop) {
     if (!config)
-        config = &xsp_ws_client_loop_config_default;
+        config = &xsp_ws_client_handler_config_default;
 
     if (!validate_config(config)) {
         ESP_LOGE(TAG, "Invalid config");
         return NULL;
     }
-    if (!client || !evt_handler) {
+    if (!evt_handler || !client || !loop) {
         ESP_LOGE(TAG, "Invalid argument");
         return NULL;
     }
 
-    xsp_ws_client_loop_handle_t loop =
-            (xsp_ws_client_loop_handle_t)malloc(sizeof(xsp_ws_client_loop_t));
-    if (!loop) {
+    int fd = xsp_ws_client_get_select_fd(client);
+    if (fd < 0) {
+        ESP_LOGE(TAG, "Invalid client (state)");
+        return NULL;
+    }
+
+    xsp_ws_client_handler_handle_t handler =
+            (xsp_ws_client_handler_handle_t)malloc(sizeof(xsp_ws_client_handler_t));
+    if (!handler) {
         ESP_LOGE(TAG, "Allocation failed");
         return NULL;
     }
 
-    loop->config = *config;
-    loop->client = client;
-    loop->evt_handler = evt_handler;
-    loop->ctx = ctx;
+    handler->config = *config;
+    handler->evt_handler = *evt_handler;
+    handler->client = client;
+    handler->loop = loop;
 
-    loop->read_buffer = malloc(loop->config.max_frame_read_size);
-    if (!loop->read_buffer) {
-        ESP_LOGE(TAG, "Allocation failed");
-        free(loop);
+    xsp_loop_fd_event_handler_t loop_fd_event_handler = {
+        on_loop_will_select,
+        on_loop_can_read_fd,
+        on_loop_can_write_fd,
+        handler,
+        fd,
+    };
+    handler->fd_watcher = xsp_loop_add_fd_watcher(loop, &loop_fd_event_handler);
+    if (!handler->fd_watcher) {
+        ESP_LOGE(TAG, "Failed to watch FD");
         return NULL;
     }
-    loop->read_buffer_size = loop->config.max_frame_read_size;
 
-    loop->close_sent = false;
-    loop->close_event_sent = false;
-    loop->close_status = XSP_WS_STATUS_NONE;
-    loop->sending_message = false;
+    handler->read_buffer = malloc(handler->config.max_frame_read_size);
+    if (!handler->read_buffer) {
+        ESP_LOGE(TAG, "Allocation failed");
+        // TODO(vtl): Check return value?
+        xsp_loop_remove_fd_watcher(loop, handler->fd_watcher);
+        free(handler);
+        return NULL;
+    }
+    handler->read_buffer_size = handler->config.max_frame_read_size;
 
-    loop->is_running = false;
-    loop->should_stop = false;
+    handler->close_sent = false;
+    handler->close_event_sent = false;
+    handler->close_status = XSP_WS_STATUS_NONE;
+    handler->sending_message = false;
 
-    return loop;
+    return handler;
 }
 
+#if 0
 esp_err_t xsp_ws_client_loop_cleanup(xsp_ws_client_loop_handle_t loop) {
     if (!loop)
         return ESP_FAIL;
