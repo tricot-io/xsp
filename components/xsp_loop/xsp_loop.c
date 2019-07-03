@@ -155,148 +155,21 @@ esp_err_t xsp_loop_stop(xsp_loop_handle_t loop) {
     return ESP_OK;
 }
 
+xsp_loop_fd_watcher_handle_t xsp_loop_add_fd_watcher(
+        const xsp_loop_fd_event_handler_t* fd_evt_handler) {
+    // TODO(vtl)
+    return NULL;
+}
+
+esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_fd_watcher_handle_t fd_watcher) {
+    // TODO(vtl)
+    return ESP_FAIL;
+}
+
 //FIXME
 #if 0
 #include <sys/select.h>
 #include <sys/time.h>
 
 #include "esp_transport_utils.h"
-
-// Returns true if the loop should stop.
-static void do_read(xsp_ws_client_loop_handle_t loop) {
-    bool fin;
-    xsp_ws_frame_opcode_t opcode;
-    int payload_size;
-    esp_err_t err = xsp_ws_client_read_frame(loop->client, &fin, &opcode, loop->read_buffer_size,
-                                             loop->read_buffer, &payload_size,
-                                             loop->config.read_timeout_ms);
-    if (err != ESP_OK) {
-        ESP_LOGD(TAG, "Read frame failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    switch (opcode) {
-    case XSP_WS_FRAME_OPCODE_CONTINUATION:
-    case XSP_WS_FRAME_OPCODE_TEXT:
-    case XSP_WS_FRAME_OPCODE_BINARY: {
-        xsp_ws_client_loop_event_t evt;
-        evt.type = XSP_WS_CLIENT_LOOP_EVENT_DATA_FRAME_RECEIVED;
-        evt.data.data_frame_received.fin = fin;
-        evt.data.data_frame_received.opcode = opcode;
-        evt.data.data_frame_received.payload_size = payload_size;
-        evt.data.data_frame_received.payload = loop->read_buffer;
-        loop->evt_handler(loop, loop->ctx, &evt);
-        break;
-    }
-
-    case XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE:
-        if (loop->close_sent)
-            break;  // Nothing more to do.
-
-        if (payload_size == 0) {
-            loop->close_status = XSP_WS_STATUS_CLOSE_RESERVED_NO_STATUS_RECEIVED;
-            xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_NONE, NULL,
-                                            loop->config.write_timeout_ms);
-        } else if (payload_size == 1) {
-            loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
-            xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR, NULL,
-                                            loop->config.write_timeout_ms);
-        } else {
-            const unsigned char* read_buffer = loop->read_buffer;
-            // Record the close status (if it's valid).
-            int close_status = (int)(((int)read_buffer[0] << 8) | (int)read_buffer[1]);
-            if (xsp_ws_is_valid_close_frame_status(close_status)) {
-                if (xsp_ws_client_utf8_validate(payload_size - 2, read_buffer + 2)) {
-                    loop->close_status = close_status;
-                    // Echo the Close frame.
-                    xsp_ws_client_write_frame(loop->client, true,
-                                              XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE, payload_size,
-                                              loop->read_buffer, loop->config.write_timeout_ms);
-                } else {
-                    loop->close_status = XSP_WS_STATUS_CLOSE_INVALID_DATA;
-                    xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_INVALID_DATA,
-                                                    NULL, loop->config.write_timeout_ms);
-                }
-            } else {
-                loop->close_status = XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR;
-                xsp_ws_client_write_close_frame(loop->client, XSP_WS_STATUS_CLOSE_PROTOCOL_ERROR,
-                                                NULL, loop->config.write_timeout_ms);
-            }
-        }
-        loop->close_sent = true;
-        // Note: We'll send the close event on leaving the loop.
-        break;
-
-    case XSP_WS_FRAME_OPCODE_PING: {
-        // Send pong automatically.
-        xsp_ws_client_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PONG, payload_size,
-                                  loop->read_buffer, loop->config.write_timeout_ms);
-
-        xsp_ws_client_loop_event_t evt;
-        evt.type = XSP_WS_CLIENT_LOOP_EVENT_PING_RECEIVED;
-        evt.data.ping_received.payload_size = payload_size;
-        evt.data.ping_received.payload = loop->read_buffer;
-        loop->evt_handler(loop, loop->ctx, &evt);
-        break;
-    }
-
-    case XSP_WS_FRAME_OPCODE_PONG: {
-        xsp_ws_client_loop_event_t evt;
-        evt.type = XSP_WS_CLIENT_LOOP_EVENT_PONG_RECEIVED;
-        evt.data.ping_received.payload_size = payload_size;
-        evt.data.ping_received.payload = loop->read_buffer;
-        loop->evt_handler(loop, loop->ctx, &evt);
-        break;
-    }
-    }
-}
-
-static void send_message_failed(xsp_ws_client_loop_handle_t loop) {
-    loop->sending_message = false;
-    xsp_ws_client_loop_event_t evt;
-    evt.type = XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT;
-    evt.data.message_sent.success = false;
-    loop->evt_handler(loop, loop->ctx, &evt);
-}
-
-static void do_write(xsp_ws_client_loop_handle_t loop) {
-    int write_size = loop->config.max_data_frame_write_size;
-    if (write_size > loop->send_size - loop->send_written)
-        write_size = loop->send_size - loop->send_written;
-
-    xsp_ws_frame_opcode_t opcode;
-    if (loop->send_written == 0)
-        opcode = loop->send_is_binary ? XSP_WS_FRAME_OPCODE_BINARY : XSP_WS_FRAME_OPCODE_TEXT;
-    else
-        opcode = XSP_WS_FRAME_OPCODE_CONTINUATION;
-    const void* payload = (const char*)loop->send_message + loop->send_written;
-    loop->send_written += write_size;
-    bool fin = loop->send_written == loop->send_size;
-
-    esp_err_t err = xsp_ws_client_write_frame(loop->client, fin, opcode, write_size, payload,
-                                              loop->config.write_timeout_ms);
-    if (err != ESP_OK) {
-        ESP_LOGD(TAG, "Write frame failed: %s", esp_err_to_name(err));
-        send_message_failed(loop);
-        return;
-    }
-
-    if (fin) {
-        loop->sending_message = false;
-        xsp_ws_client_loop_event_t evt;
-        evt.type = XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT;
-        evt.data.message_sent.success = true;
-        loop->evt_handler(loop, loop->ctx, &evt);
-    }
-}
-
-static void do_idle(xsp_ws_client_loop_handle_t loop) {
-    xsp_ws_client_loop_event_t evt;
-    evt.type = XSP_WS_CLIENT_LOOP_EVENT_IDLE;
-    loop->evt_handler(loop, loop->ctx, &evt);
-}
-
-static bool is_closed(xsp_ws_client_loop_handle_t loop) {
-    return loop->close_sent || xsp_ws_client_get_state(loop->client) != XSP_WS_CLIENT_STATE_OK;
-}
 #endif
