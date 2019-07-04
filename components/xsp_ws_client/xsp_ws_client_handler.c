@@ -287,76 +287,52 @@ esp_err_t xsp_ws_client_handler_send_message(xsp_ws_client_handler_handle_t hand
                                              bool binary,
                                              int message_size,
                                              const void* message) {
-//FIXME
-return ESP_FAIL;
+    if (!handler || message_size < 0 || (message_size > 0 && !message))
+        return ESP_ERR_INVALID_ARG;
+    if (!xsp_loop_is_running(handler->loop) || handler->sending_message)
+        return ESP_ERR_INVALID_STATE;
+    if (xsp_ws_client_get_state(handler->client) != XSP_WS_CLIENT_STATE_OK)
+        return ESP_FAIL;
+
+    handler->sending_message = true;
+    handler->send_is_binary = binary;
+    handler->send_message = message;
+    handler->send_size = message_size;
+    handler->send_written = 0;
+    return ESP_OK;
 }
 
 esp_err_t xsp_ws_client_handler_close(xsp_ws_client_handler_handle_t handler, int close_status) {
-//FIXME
-return ESP_FAIL;
+    if (!handler || !xsp_ws_is_valid_close_frame_status(close_status))
+        return ESP_ERR_INVALID_ARG;
+    if (!xsp_loop_is_running(handler->loop))
+        return ESP_ERR_INVALID_STATE;
+
+    // Don't report an error if we can't actually send a close frame. Note that in the
+    // XSP_WS_CLIENT_STATE_FAILED case, we'll send a close frame automatically.
+    if (xsp_ws_client_get_state(handler->client) != XSP_WS_CLIENT_STATE_OK)
+        return ESP_OK;
+
+    // Note: We'll avoid reporting an error if we're already sent a close frame, since it may have
+    // been due to echoing a close frame from the server. (Moreover, an idempotent close is nice to
+    // have.)
+    if (handler->close_sent)
+        return ESP_OK;
+
+    xsp_ws_client_write_close_frame(handler->client, close_status, NULL,
+                                    handler->config.write_timeout_ms);
+    handler->close_sent = true;
+    return ESP_OK;
 }
 
 esp_err_t xsp_ws_client_handler_ping(xsp_ws_client_handler_handle_t handler,
                                      int payload_size,
                                      const void* payload) {
-//FIXME
-return ESP_FAIL;
-}
-
-#if 0
-esp_err_t xsp_ws_client_loop_send_message(xsp_ws_client_loop_handle_t loop,
-                                          bool binary,
-                                          int message_size,
-                                          const void* message) {
-    if (!loop || message_size < 0 || (message_size > 0 && !message))
+    if (!handler || payload_size < 0 || payload_size > 125 || (payload_size != 0 && !payload))
         return ESP_ERR_INVALID_ARG;
-    if (!loop->is_running || loop->sending_message)
-        return ESP_ERR_INVALID_STATE;
-    if (xsp_ws_client_get_state(loop->client) != XSP_WS_CLIENT_STATE_OK)
-        return ESP_FAIL;
-
-    loop->sending_message = true;
-    loop->send_is_binary = binary;
-    loop->send_message = message;
-    loop->send_size = message_size;
-    loop->send_written = 0;
-    return ESP_OK;
-}
-
-esp_err_t xsp_ws_client_loop_close(xsp_ws_client_loop_handle_t loop, int close_status) {
-    if (!loop || !xsp_ws_is_valid_close_frame_status(close_status))
-        return ESP_ERR_INVALID_ARG;
-    if (!loop->is_running)
+    if (!xsp_loop_is_running(handler->loop))
         return ESP_ERR_INVALID_STATE;
 
-    // Don't report an error if we can't actually send a close frame. Note that in the
-    // XSP_WS_CLIENT_STATE_FAILED case, we'll send a close frame automatically.
-    if (xsp_ws_client_get_state(loop->client) != XSP_WS_CLIENT_STATE_OK) {
-        // Note: The loop will stop automatically in this case.
-        return ESP_OK;
-    }
-
-    // Note: We'll avoid reporting an error if we're already sent a close frame, since it may have
-    // been due to echoing a close frame from the server. (Moreover, an idempotent close is nice to
-    // have.)
-    if (loop->close_sent)
-        return ESP_OK;
-
-    xsp_ws_client_write_close_frame(loop->client, close_status, NULL,
-                                    loop->config.write_timeout_ms);
-    loop->close_sent = true;
-    return ESP_OK;
+    return xsp_ws_client_write_frame(handler->client, true, XSP_WS_FRAME_OPCODE_PING, payload_size,
+                                     payload, handler->config.write_timeout_ms);
 }
-
-esp_err_t xsp_ws_client_loop_ping(xsp_ws_client_loop_handle_t loop,
-                                  int payload_size,
-                                  const void* payload) {
-    if (!loop || payload_size < 0 || payload_size > 125 || (payload_size != 0 && !payload))
-        return ESP_ERR_INVALID_ARG;
-    if (!loop->is_running)
-        return ESP_ERR_INVALID_STATE;
-
-    return xsp_ws_client_write_frame(loop->client, true, XSP_WS_FRAME_OPCODE_PING, payload_size,
-                                     payload, loop->config.write_timeout_ms);
-}
-#endif
