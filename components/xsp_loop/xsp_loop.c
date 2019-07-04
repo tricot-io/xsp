@@ -3,7 +3,6 @@
 
 #include "xsp_loop.h"
 
-#include <stdbool.h>
 #include <stdlib.h>
 #include <sys/queue.h>
 #include <sys/select.h>
@@ -68,6 +67,12 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
     SLIST_INIT(&loop->fd_watchers_head);
 
     return loop;
+}
+
+bool xsp_loop_is_running(xsp_loop_handle_t loop) {
+    if (!loop)
+        return false;
+    return loop->is_running;
 }
 
 esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {

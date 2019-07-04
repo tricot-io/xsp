@@ -4,6 +4,8 @@
 #ifndef XSP_LOOP_H_
 #define XSP_LOOP_H_
 
+#include <stdbool.h>
+
 #include "esp_err.h"
 
 #ifdef __cplusplus
@@ -61,6 +63,9 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
 
 // Cleans up (shuts down) the loop, which must not be running.
 esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop);
+
+// Returns true if the loop is running.
+bool xsp_loop_is_running(xsp_loop_handle_t loop);
 
 // Runs the loop. The loop will run until `xsp_loop_stop()` is called.
 esp_err_t xsp_loop_run(xsp_loop_handle_t loop);

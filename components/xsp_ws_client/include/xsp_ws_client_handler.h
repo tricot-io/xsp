@@ -78,9 +78,30 @@ xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
         xsp_ws_client_handle_t client,
         xsp_loop_handle_t loop);
 
+// Cleans up (shuts down) the WebSocket client handler (does not clean up the client).
+esp_err_t xsp_ws_client_handler_cleanup(xsp_ws_client_handler_handle_t handler);
 
+// Schedules the given message to be sent. If successfully scheduled, the
+// `on_ws_client_message_sent` event handler will be called upon (successful or unsuccessful)
+// completion of the send; `message` must remain valid until then or until handler shutdown. Should
+// only be called from "inside" the loop.
+// TODO(vtl): Possibly this should try to send the first frame immediately.
+esp_err_t xsp_ws_client_handler_send_message(xsp_ws_client_handler_handle_t handler,
+                                             bool binary,
+                                             int message_size,
+                                             const void* message);
 
+// Closes the connection. Note that this sends a close message (if possible) and stops the handler;
+// it does not close the underlying client, nor does it stop the loop. Should only be called from
+// "inside" the loop.
+esp_err_t xsp_ws_client_handler_close(xsp_ws_client_handler_handle_t handler, int close_status);
 
+// Sends a ping.
+esp_err_t xsp_ws_client_handler_ping(xsp_ws_client_handler_handle_t handler,
+                                     int payload_size,
+                                     const void* payload);
+
+//FIXME
 // NOTES
 //
 // *   The loop receives *frames* and provides them to the user (to be defragmented into messages if
@@ -96,43 +117,6 @@ xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
 // *   It sends messages asynchronously.
 //     *   This allows larger messages to be sent without blocking, and frames to be received
 //         while doing so (for multi-frame messages).
-
-/*
-// Initializes the WebSocket client loop; doesn't take ownership of the client: `client` should
-// remain valid for the lifetime of the loop; it must be connected before "run". The resulting loop
-// may be used only once per connection (even if the same client is reconnected, a new loop must be
-// created).
-// TODO(vtl): Add a reinit or reset function?
-xsp_ws_client_loop_handle_t xsp_ws_client_loop_init(const xsp_ws_client_loop_config_t* config,
-                                                    xsp_ws_client_handle_t client,
-                                                    xsp_ws_client_loop_event_handler_t evt_handler,
-                                                    void* ctx);
-
-// Cleans up (shuts down) the WebSocket client loop (does not clean up the client).
-esp_err_t xsp_ws_client_loop_cleanup(xsp_ws_client_loop_handle_t loop);
-*/
-
-/*
-// Schedules the given message to be sent. On success (of scheduling),
-// `XSP_WS_CLIENT_LOOP_EVENT_MESSAGE_SENT` will be generated upon completion of the send and
-// `message` must remain valid until that event (or until loop shutdown). Should only be called from
-// "inside" the loop, i.e., inside the event handler.
-// TODO(vtl): Possibly this should try to send the first frame immediately.
-esp_err_t xsp_ws_client_loop_send_message(xsp_ws_client_loop_handle_t loop,
-                                          bool binary,
-                                          int message_size,
-                                          const void* message);
-
-// Closes the connection. Note that this sends a close message (if possible) and stops the loop; it
-// does not close the underlying client. Should only be called from "inside" the loop, i.e., inside
-// the event handler.
-esp_err_t xsp_ws_client_loop_close(xsp_ws_client_loop_handle_t loop, int close_status);
-
-// Sends a ping.
-esp_err_t xsp_ws_client_loop_ping(xsp_ws_client_loop_handle_t loop,
-                                  int payload_size,
-                                  const void* payload);
-*/
 
 #ifdef __cplusplus
 }  // extern "C"
