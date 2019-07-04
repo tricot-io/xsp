@@ -291,7 +291,7 @@ static bool do_loop_iteration(xsp_ws_client_loop_handle_t loop) {
     bool did_something = false;
 
     // Handle pre-buffered data first, as a special case.
-    if (xsp_ws_client_has_buffered_read_data(loop->client)) {
+    while (xsp_ws_client_has_buffered_read_data(loop->client)) {
         do_read(loop);
         did_something = true;
     }
