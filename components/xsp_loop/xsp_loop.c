@@ -75,6 +75,10 @@ bool xsp_loop_is_running(xsp_loop_handle_t loop) {
     return loop->is_running;
 }
 
+bool xsp_loop_should_stop(xsp_loop_handle_t loop) {
+    return !xsp_loop_is_running(loop) || loop->should_stop;
+}
+
 esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {
     if (!loop)
         return ESP_FAIL;

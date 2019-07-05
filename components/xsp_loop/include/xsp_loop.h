@@ -67,6 +67,10 @@ esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop);
 // Returns true if the loop is running.
 bool xsp_loop_is_running(xsp_loop_handle_t loop);
 
+// Returns true if the loop is running, but should stop ASAP (i.e., `xsp_loop_stop()` has been
+// called).
+bool xsp_loop_should_stop(xsp_loop_handle_t loop);
+
 // Runs the loop. The loop will run until `xsp_loop_stop()` is called.
 esp_err_t xsp_loop_run(xsp_loop_handle_t loop);
 

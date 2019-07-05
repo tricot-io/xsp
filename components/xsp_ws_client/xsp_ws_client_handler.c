@@ -62,6 +62,36 @@ static bool validate_config(const xsp_ws_client_handler_config_t* config) {
     return true;
 }
 
+static bool should_stop(xsp_ws_client_handler_handle_t handler) {
+    if (xsp_loop_should_stop(handler->loop) || handler->close_sent)
+        return true;
+
+    switch (xsp_ws_client_get_state(handler->client)) {
+    case XSP_WS_CLIENT_STATE_CLOSED:
+        // This shouldn't happen.
+        ESP_LOGE(TAG, "Loop running with client closed!");
+        return true;
+    case XSP_WS_CLIENT_STATE_OK:
+        return false;
+    case XSP_WS_CLIENT_STATE_FAILED:
+        return true;
+    case XSP_WS_CLIENT_STATE_FAILED_NO_CLOSE:
+        return true;
+    }
+    return true;  // Shouldn't get here.
+}
+
+static void maybe_send_close_event(xsp_ws_client_handler_handle_t handler) {
+    if (handler->close_event_sent)
+        return;
+
+    handler->close_event_sent = true;
+    if (handler->evt_handler.on_ws_client_closed) {
+        handler->evt_handler.on_ws_client_closed(handler, handler->evt_handler.ctx,
+                                                 handler->close_status);
+    }
+}
+
 static void do_read(xsp_ws_client_handler_handle_t handler) {
     bool fin;
     xsp_ws_frame_opcode_t opcode;
@@ -71,6 +101,7 @@ static void do_read(xsp_ws_client_handler_handle_t handler) {
                                              &payload_size, handler->config.read_timeout_ms);
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Read frame failed: %s", esp_err_to_name(err));
+        maybe_send_close_event(handler);
         return;
     }
 
@@ -122,10 +153,7 @@ static void do_read(xsp_ws_client_handler_handle_t handler) {
             }
         }
         handler->close_sent = true;
-        if (handler->evt_handler.on_ws_client_closed) {
-            handler->evt_handler.on_ws_client_closed(handler, handler->evt_handler.ctx,
-                                                     handler->close_status);
-        }
+        // We'll send the close event below.
         break;
 
     case XSP_WS_FRAME_OPCODE_PING:
@@ -145,14 +173,19 @@ static void do_read(xsp_ws_client_handler_handle_t handler) {
         }
         break;
     }
+    if (should_stop(handler))
+        maybe_send_close_event(handler);
 }
 
 static xsp_loop_fd_watch_for_t on_loop_will_select(xsp_loop_handle_t loop, void* ctx, int fd) {
     xsp_ws_client_handler_handle_t handler = (xsp_ws_client_handler_handle_t)ctx;
 
     // TODO(vtl): Even if We do real work in this, but the loop will still consider us to be idle.
-    while (xsp_ws_client_has_buffered_read_data(handler->client))
+    while (!should_stop(handler) && xsp_ws_client_has_buffered_read_data(handler->client))
         do_read(handler);
+
+    if (should_stop(handler))
+        return XSP_LOOP_FD_WATCH_FOR_NONE;
 
     return handler->sending_message ? XSP_LOOP_FD_WATCH_FOR_WRITE_READ : XSP_LOOP_FD_WATCH_FOR_READ;
 }
@@ -188,19 +221,22 @@ static void do_write(xsp_ws_client_handler_handle_t handler) {
     if (err != ESP_OK) {
         ESP_LOGD(TAG, "Write frame failed: %s", esp_err_to_name(err));
         send_message_completed(handler, false);
-        return;
+    } else {
+        if (fin)
+            send_message_completed(handler, true);
     }
-
-    if (fin)
-        send_message_completed(handler, true);
+    if (should_stop(handler))
+        maybe_send_close_event(handler);
 }
 
 static void on_loop_can_write_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
     xsp_ws_client_handler_handle_t handler = (xsp_ws_client_handler_handle_t)ctx;
 
-    do {
+    while (!should_stop(handler) && handler->sending_message) {
         do_write(handler);
-    } while (handler->sending_message && xsp_ws_client_poll_write(handler->client, 0) == ESP_OK);
+        if (xsp_ws_client_poll_write(handler->client, 0) != ESP_OK)
+            break;
+    }
 }
 
 xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
