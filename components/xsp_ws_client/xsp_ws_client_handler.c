@@ -190,12 +190,6 @@ static xsp_loop_fd_watch_for_t on_loop_will_select(xsp_loop_handle_t loop, void*
     return handler->sending_message ? XSP_LOOP_FD_WATCH_FOR_WRITE_READ : XSP_LOOP_FD_WATCH_FOR_READ;
 }
 
-static void on_loop_can_read_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
-    xsp_ws_client_handler_handle_t handler = (xsp_ws_client_handler_handle_t)ctx;
-
-    do_read(handler);
-}
-
 static void send_message_completed(xsp_ws_client_handler_handle_t handler, bool success) {
     handler->sending_message = false;
     if (handler->evt_handler.on_ws_client_message_sent)
@@ -239,6 +233,12 @@ static void on_loop_can_write_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
     }
 }
 
+static void on_loop_can_read_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
+    xsp_ws_client_handler_handle_t handler = (xsp_ws_client_handler_handle_t)ctx;
+
+    do_read(handler);
+}
+
 xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
         const xsp_ws_client_handler_config_t* config,
         const xsp_ws_client_event_handler_t* evt_handler,
@@ -276,8 +276,8 @@ xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
 
     xsp_loop_fd_event_handler_t loop_fd_event_handler = {
         on_loop_will_select,
-        on_loop_can_read_fd,
         on_loop_can_write_fd,
+        on_loop_can_read_fd,
         handler,
         fd,
     };
