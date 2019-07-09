@@ -181,22 +181,13 @@ static void ws_client_example_task(void* pvParameters) {
     esp_err_t err;
     xsp_ws_client_handle_t client = NULL;
     loop_context_t ctx = {};
-    xsp_loop_event_handler_t loop_evt_handler = {
-        &on_loop_start,
-        &on_loop_stop,
-        &on_loop_idle,
-        &ctx,
-    };
+    xsp_loop_event_handler_t loop_evt_handler = {&on_loop_start, &on_loop_stop, &on_loop_idle,
+                                                 &ctx};
     xsp_loop_handle_t loop = NULL;
     xsp_ws_client_event_handler_t client_evt_handler = {
-        &on_ws_client_closed,
-        &on_ws_client_data_frame_received,
-        &on_ws_client_ping_received,
-        &on_ws_client_pong_received,
-        &on_ws_client_message_sent,
-        &ctx
-    };
-
+            &on_ws_client_closed,        &on_ws_client_data_frame_received,
+            &on_ws_client_ping_received, &on_ws_client_pong_received,
+            &on_ws_client_message_sent,  &ctx};
     static const char kUrl[] = CONFIG_MAIN_URL;
     static const char kSubprotocols[] = CONFIG_MAIN_SUBPROTOCOLS;
     bool have_subprotocols = strlen(kSubprotocols) > 0;
