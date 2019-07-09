@@ -107,7 +107,7 @@ esp_err_t xsp_ws_client_handler_ping(xsp_ws_client_handler_handle_t handler,
                                      int payload_size,
                                      const void* payload);
 
-//FIXME
+// FIXME
 // NOTES
 //
 // *   The loop receives *frames* and provides them to the user (to be defragmented into messages if

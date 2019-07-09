@@ -136,10 +136,9 @@ static void do_read(xsp_ws_client_handler_handle_t handler) {
                 if (xsp_ws_client_utf8_validate(payload_size - 2, read_buffer + 2)) {
                     handler->close_status = close_status;
                     // Echo the Close frame.
-                    xsp_ws_client_write_frame(handler->client, true,
-                                              XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE, payload_size,
-                                              handler->read_buffer,
-                                              handler->config.write_timeout_ms);
+                    xsp_ws_client_write_frame(
+                            handler->client, true, XSP_WS_FRAME_OPCODE_CONNECTION_CLOSE,
+                            payload_size, handler->read_buffer, handler->config.write_timeout_ms);
                 } else {
                     handler->close_status = XSP_WS_STATUS_CLOSE_INVALID_DATA;
                     xsp_ws_client_write_close_frame(handler->client,
@@ -277,11 +276,7 @@ xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
     handler->loop = loop;
 
     xsp_loop_fd_event_handler_t loop_fd_event_handler = {
-        on_loop_will_select,
-        on_loop_can_write_fd,
-        on_loop_can_read_fd,
-        handler,
-        fd,
+            on_loop_will_select, on_loop_can_write_fd, on_loop_can_read_fd, handler, fd,
     };
     handler->fd_watcher = xsp_loop_add_fd_watcher(loop, &loop_fd_event_handler);
     if (!handler->fd_watcher) {
