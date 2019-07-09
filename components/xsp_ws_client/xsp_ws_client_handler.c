@@ -184,8 +184,10 @@ static xsp_loop_fd_watch_for_t on_loop_will_select(xsp_loop_handle_t loop, void*
     while (!should_stop(handler) && xsp_ws_client_has_buffered_read_data(handler->client))
         do_read(handler);
 
-    if (should_stop(handler))
+    if (should_stop(handler)) {
+        maybe_send_close_event(handler);
         return XSP_LOOP_FD_WATCH_FOR_NONE;
+    }
 
     return handler->sending_message ? XSP_LOOP_FD_WATCH_FOR_WRITE_READ : XSP_LOOP_FD_WATCH_FOR_READ;
 }
@@ -317,6 +319,20 @@ esp_err_t xsp_ws_client_handler_cleanup(xsp_ws_client_handler_handle_t handler) 
     xsp_loop_remove_fd_watcher(handler->loop, handler->fd_watcher);
     free(handler);
     return ESP_OK;
+}
+
+xsp_ws_client_handle_t xsp_ws_client_handler_get_ws_client(xsp_ws_client_handler_handle_t handler) {
+    if (!handler)
+        return NULL;
+
+    return handler->client;
+}
+
+xsp_loop_handle_t xsp_ws_client_handler_get_loop(xsp_ws_client_handler_handle_t handler) {
+    if (!handler)
+        return NULL;
+
+    return handler->loop;
 }
 
 esp_err_t xsp_ws_client_handler_send_message(xsp_ws_client_handler_handle_t handler,

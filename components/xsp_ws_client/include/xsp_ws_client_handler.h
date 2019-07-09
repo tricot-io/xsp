@@ -81,6 +81,12 @@ xsp_ws_client_handler_handle_t xsp_ws_client_handler_init(
 // Cleans up (shuts down) the WebSocket client handler (does not clean up the client).
 esp_err_t xsp_ws_client_handler_cleanup(xsp_ws_client_handler_handle_t handler);
 
+// Returns the WS client for the handler (must be initialized and not cleaned up).
+xsp_ws_client_handle_t xsp_ws_client_handler_get_ws_client(xsp_ws_client_handler_handle_t handler);
+
+// Returns the loop for the handler (must be initialized and not cleaned up).
+xsp_loop_handle_t xsp_ws_client_handler_get_loop(xsp_ws_client_handler_handle_t handler);
+
 // Schedules the given message to be sent. If successfully scheduled, the
 // `on_ws_client_message_sent` event handler will be called upon (successful or unsuccessful)
 // completion of the send; `message` must remain valid until then or until handler shutdown. Should

@@ -4,7 +4,7 @@
 menu "XSP event loop"
 
 config XSP_LOOP_DEFAULT_POLL_TIMEOUT_MS
-    int "Default poll timeout in milliseconds (default 0)"
+    int "Default poll timeout in milliseconds (default 10)"
     default 10
     range 0 1000000000
     help
