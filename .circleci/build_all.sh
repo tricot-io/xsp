@@ -6,8 +6,6 @@
 
 TARGET_DIRS=(
     examples/atomic8_test
-    examples/ws_client
-    examples/ws_client_test
     examples/ws_client2
     examples/ws_client_test2
 )
