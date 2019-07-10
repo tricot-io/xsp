@@ -5,7 +5,6 @@ set(COMPONENT_SRCS
     xsp_ws_client.c
     xsp_ws_client_defrag.c
     xsp_ws_client_handler.c
-    xsp_ws_client_loop.c
     xsp_ws_client_types.c
     xsp_ws_client_utf8.c
 )

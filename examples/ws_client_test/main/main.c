@@ -30,7 +30,6 @@
 #include "xsp_ws_client.h"
 #include "xsp_ws_client_defrag.h"
 #include "xsp_ws_client_handler.h"
-#include "xsp_ws_client_loop.h"
 
 #include "app_wifi.h"
 
