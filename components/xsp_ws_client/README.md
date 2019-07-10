@@ -84,9 +84,7 @@ Its operation proceeds as follows:
 
 The loop provides the following events:
 
-*   Idle: This is sent when an iteration occurs with no work being done. The
-    application should either do something, or sleep briefly (to avoid spinning
-    the loop).
+*   Idle: This is sent when an iteration occurs with no work being done.
 *   Closed: This is sent when the connection closed (cleanly or otherwise); it
     is the last event sent before the loop stops.
 *   Data-frame-received: This is sent when a data frame is received.
