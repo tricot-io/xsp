@@ -10,7 +10,7 @@ https://github.com/tricot-io/esp-idf:
 
 *   branch: `release/v3.2.2-tricot`
 *   commit: `0ebe7e8e758ca6cd40c4c700ac5375f0de062a44`
-*   tag: (untagged; under development)
+*   tag: `v3.2.2-tricot1.1.0`
 
 ## Components
 
