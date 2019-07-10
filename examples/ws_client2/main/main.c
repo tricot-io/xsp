@@ -41,15 +41,15 @@ static const char* trunc_dots(int size) {
     return (size > CONFIG_MAIN_TRUNC_SIZE) ? "..." : "";
 }
 
-void on_loop_start(xsp_loop_handle_t loop, void* raw_ctx) {
+static void on_loop_start(xsp_loop_handle_t loop, void* raw_ctx) {
     ESP_LOGI(TAG, "Event: started");
 }
 
-void on_loop_stop(xsp_loop_handle_t loop, void* raw_ctx) {
+static void on_loop_stop(xsp_loop_handle_t loop, void* raw_ctx) {
     ESP_LOGI(TAG, "Event: stopped");
 }
 
-void on_loop_idle(xsp_loop_handle_t loop, void* raw_ctx) {
+static void on_loop_idle(xsp_loop_handle_t loop, void* raw_ctx) {
     loop_context_t* ctx = (loop_context_t*)raw_ctx;
 
     ESP_LOGD(TAG, "Event: idle");  // This is super noisy.
@@ -92,7 +92,7 @@ void on_loop_idle(xsp_loop_handle_t loop, void* raw_ctx) {
     }
 }
 
-void on_ws_client_closed(xsp_ws_client_handler_handle_t handler, void* raw_ctx, int status) {
+static void on_ws_client_closed(xsp_ws_client_handler_handle_t handler, void* raw_ctx, int status) {
     ESP_LOGI(TAG, "Event: closed");
 
     ESP_LOGI(TAG, "  status=%d", status);
@@ -101,12 +101,12 @@ void on_ws_client_closed(xsp_ws_client_handler_handle_t handler, void* raw_ctx, 
         ESP_LOGE(TAG, "Failed to stop loop: %s", esp_err_to_name(err));
 }
 
-void on_ws_client_data_frame_received(xsp_ws_client_handler_handle_t handler,
-                                      void* raw_ctx,
-                                      bool fin,
-                                      xsp_ws_frame_opcode_t opcode,
-                                      int payload_size,
-                                      const void* payload) {
+static void on_ws_client_data_frame_received(xsp_ws_client_handler_handle_t handler,
+                                             void* raw_ctx,
+                                             bool fin,
+                                             xsp_ws_frame_opcode_t opcode,
+                                             int payload_size,
+                                             const void* payload) {
     loop_context_t* ctx = (loop_context_t*)raw_ctx;
 
     ESP_LOGI(TAG, "Event: data frame received");
@@ -136,10 +136,10 @@ void on_ws_client_data_frame_received(xsp_ws_client_handler_handle_t handler,
     // TODO(vtl): Report error if not done?
 }
 
-void on_ws_client_ping_received(xsp_ws_client_handler_handle_t handler,
-                                void* raw_ctx,
-                                int payload_size,
-                                const void* payload) {
+static void on_ws_client_ping_received(xsp_ws_client_handler_handle_t handler,
+                                       void* raw_ctx,
+                                       int payload_size,
+                                       const void* payload) {
     ESP_LOGI(TAG, "Event: ping received");
 
     char buf[CONFIG_MAIN_TRUNC_SIZE + 1];
@@ -148,10 +148,10 @@ void on_ws_client_ping_received(xsp_ws_client_handler_handle_t handler,
              trunc_dots(payload_size));
 }
 
-void on_ws_client_pong_received(xsp_ws_client_handler_handle_t handler,
-                                void* raw_ctx,
-                                int payload_size,
-                                const void* payload) {
+static void on_ws_client_pong_received(xsp_ws_client_handler_handle_t handler,
+                                       void* raw_ctx,
+                                       int payload_size,
+                                       const void* payload) {
     ESP_LOGI(TAG, "Event: pong received");
 
     char buf[CONFIG_MAIN_TRUNC_SIZE + 1];
@@ -160,9 +160,9 @@ void on_ws_client_pong_received(xsp_ws_client_handler_handle_t handler,
              trunc_dots(payload_size));
 }
 
-void on_ws_client_message_sent(xsp_ws_client_handler_handle_t handler,
-                               void* raw_ctx,
-                               bool success) {
+static void on_ws_client_message_sent(xsp_ws_client_handler_handle_t handler,
+                                      void* raw_ctx,
+                                      bool success) {
     loop_context_t* ctx = (loop_context_t*)raw_ctx;
 
     ESP_LOGI(TAG, "Event: message sent");
