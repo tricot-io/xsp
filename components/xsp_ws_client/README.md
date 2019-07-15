@@ -59,34 +59,32 @@ Its basic primitives are all synchronous, and consist of:
 *   reading a WebSocket frame; and
 *   shutting down the transport.
 
-## The xsp_ws_client_loop layer
+## The xsp_ws_client_handler layer
 
-This layer maintains WebSocket state and provides an event loop; it implements
-most of the WebSocket protocol (apart from the basics provided by
-`xsp_ws_client`).
+This layer maintains WebSocket state and implements most of the WebSocket
+protocol (apart from the basics provided by `xsp_ws_client`) in conjunction with
+the `xsp_loop` event loop.
 
 Its operation proceeds as follows:
 
-*   Before the loop starts, the `xsp_ws_client` connection should be
-    established.
-*   Then the loop is run, and it provides the application with *events* (via an
-    event handler function implemented by the application).
+*   Before initializing the handler, the `xsp_ws_client` connection should be
+    established. The `xsp_loop` should also be created. Both must remain valid
+    for the lifetime of the handler.
+*   Once the handler is initialized it will watch the connection using the
+    loop's FD watcher API. It will appropriately handle will-select, can-read,
+    and can-write events.
+*   In turn, it will provide the application with its own events (see below).
     *   It provides an API for use while handling events.
-    *   The loop continues to run until either the connection is closed or the
-        application stops the loop (in which case it may resume the loop later).
-    *   The loop automatically reads frames (and generates events), handling the
-        close handshake and also automatically sending pongs for any pings
-        received.
-*   Once the connection is closed and the loop has stopped, the `xsp_ws_client`
-    connection should be shut down (at the transport level).
+    *   It will automatically read frames (generating events as appropriate),
+        handle the close handshake, and also automatically sending pongs for any
+        pings received.
+*   After the handler is shut down, the `xsp_ws_client` should be shut down (at
+    the transport level).
 
 ### Events
 
-The loop provides the following events:
+The handler provides the following events:
 
-*   Idle: This is sent when an iteration occurs with no work being done.
-*   Closed: This is sent when the connection closed (cleanly or otherwise); it
-    is the last event sent before the loop stops.
 *   Data-frame-received: This is sent when a data frame is received.
 *   Ping-received: This is sent when a ping frame is received (after a pong is
     automatically sent).
@@ -100,16 +98,13 @@ The loop provides the following events:
 
 The following are available while handling an event:
 
-*   Stop: Stops the loop. The loop exits, and may be resumed later. (Note that
-    if the connection is closed, the resumption will be very brief.)
 *   Send message: Schedules a message to be sent. Currently, this is strictly
     asynchronous (and no data is sent immediately). If the function indicates
     success (i.e., that the message was scheduled successfully), the message
     buffer must remain valid until the corresponding message-sent event. No
     queueing is done, and another message may not be (scheduled to be) sent
     until that event.
-*   Close: Closes the connection. This will also result in the loop being
-    terminated.
+*   Close: Closes the connection.
 *   Ping: Sends a ping frame.
 
 ## The xsp_ws_client_defrag layer
