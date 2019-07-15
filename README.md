@@ -14,4 +14,7 @@ https://github.com/tricot-io/esp-idf:
 
 ## Components
 
+*   `xsp_atomic8`: supports 64-bit "atomic" operations.
+*   `xsp_cxx`: C++ wrappers for some of the other components.
+*   `xsp_loop`: an event loop (in development).
 *   `xsp_ws_client`: a WebSocket client.
