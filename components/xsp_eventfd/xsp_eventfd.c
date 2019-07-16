@@ -20,9 +20,12 @@
 #define LOCK(mux) portENTER_CRITICAL(mux)
 #define UNLOCK(mux) portEXIT_CRITICAL(mux)
 
+// NOTE: xsp_eventfd_ctx_t's mux precedes xsp_eventfd_t's mux in the (acquisition) order.
+
 typedef struct xsp_eventfd_struct {
+    portMUX_TYPE mux;
+//FIXME we'll probably have to refcount this
     uint64_t value;
-//FIXME
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
@@ -30,7 +33,7 @@ typedef struct xsp_eventfd_ctx {
     size_t num_eventfd;
     struct {
         int fd;  // Should be initialized to -1.
-        xsp_eventfd_t* eventfd;
+        xsp_eventfd_t* efd;
     } eventfds[MAX_NUM_EVENTFD];
 } xsp_eventfd_ctx_t;
 
@@ -45,27 +48,29 @@ static xsp_eventfd_t* eventfd_lookup_no_lock(xsp_eventfd_ctx_t* ctx, int fd, siz
         if (ctx->eventfds[i].fd == fd) {
             if (idx)
                 *idx = i;
-            return ctx->eventfds[i].eventfd;
+            return ctx->eventfds[i].efd;
         }
     }
 
     return NULL;
 }
 
+// Looks up the given FD and returns its `xsp_eventfd_t` with its mux acquired. On failure, sets
+// errno and returns null.
 static xsp_eventfd_t* eventfd_lookup(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->mux);
 
-    xsp_eventfd_t* rv = eventfd_lookup_no_lock(raw_ctx, fd, NULL);
-    if (!rv) {
+    xsp_eventfd_t* efd = eventfd_lookup_no_lock(raw_ctx, fd, NULL);
+    if (!efd) {
         UNLOCK(&ctx->mux);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
         return NULL;
     }
 
-//FIXME take specific mutex
+    LOCK(&efd->mux);
     UNLOCK(&ctx->mux);
-    return rv;
+    return efd;
 }
 
 static ssize_t eventfd_write_p(void* raw_ctx, int fd, const void * data, size_t size) {
@@ -73,7 +78,9 @@ static ssize_t eventfd_write_p(void* raw_ctx, int fd, const void * data, size_t 
     if (!efd)
         return -1;
 
-//FIXME release specific mutex
+//FIXME
+
+    UNLOCK(&efd->mux);
 //FIXME
     return -1;
 }
@@ -83,7 +90,10 @@ static ssize_t eventfd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
     if (!efd)
         return -1;
 
-//FIXME release specific mutex
+//FIXME
+
+    UNLOCK(&efd->mux);
+
 //FIXME
     return -1;
 }
@@ -100,14 +110,16 @@ int eventfd_close_p(void* raw_ctx, int fd) {
         return -1;
     }
 
-//FIXME remove entry
-//FIXME take specific mutex
+    ctx->eventfds[idx].fd = -1;
+    ctx->eventfds[idx].efd = NULL;
+    LOCK(&efd->mux);
     UNLOCK(&ctx->mux);
 
-//FIXME wakeup all waiters?
+//FIXME wake up all waiters?
 
-//FIXME
-    return -1;
+    UNLOCK(&efd->mux);
+    free(efd);
+    return 0;
 }
 
 void xsp_eventfd_register() {
@@ -126,7 +138,7 @@ void xsp_eventfd_register() {
     g_eventfd_ctx->num_eventfd = 0;
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         g_eventfd_ctx->eventfds[i].fd = -1;
-        g_eventfd_ctx->eventfds[i].eventfd = NULL;
+        g_eventfd_ctx->eventfds[i].efd = NULL;
     }
 
     ESP_ERROR_CHECK(esp_vfs_register_with_id(&vfs, g_eventfd_ctx, &g_eventfd_vfs_id));
@@ -135,6 +147,12 @@ void xsp_eventfd_register() {
 int xsp_eventfd(unsigned initval, int flags) {
     if (!g_eventfd_ctx) {
         errno = EFAULT;
+        return -1;
+    }
+
+    xsp_eventfd_t* efd = (xsp_eventfd_t*)malloc(sizeof(xsp_eventfd_t));
+    if (!efd) {
+        errno = ENOMEM;
         return -1;
     }
 
@@ -147,13 +165,32 @@ int xsp_eventfd(unsigned initval, int flags) {
     }
     if (idx == MAX_NUM_EVENTFD) {
         UNLOCK(&g_eventfd_ctx->mux);
+        free(efd);
         errno = ENFILE;  // TODO(vtl): Not sure about this.
         return -1;
     }
 
-//FIXME register; set entry
+    int fd;
+    esp_err_t err = esp_vfs_register_fd(g_eventfd_vfs_id, &fd);
+    if (err != ESP_OK) {
+        UNLOCK(&g_eventfd_ctx->mux);
+        free(efd);
+        switch (err) {
+        case ESP_ERR_INVALID_ARG:
+            errno = EINVAL;
+            break;
+        case ESP_ERR_NO_MEM:
+            errno = ENFILE;
+            break;
+        default:
+            errno = EFAULT;  // TODO(vtl): ???
+            break;
+        }
+        return -1;
+    }
 
+    g_eventfd_ctx->eventfds[idx].fd = fd;
+    g_eventfd_ctx->eventfds[idx].efd = efd;
     UNLOCK(&g_eventfd_ctx->mux);
-//FIXME
-    return -1;
+    return fd;
 }
