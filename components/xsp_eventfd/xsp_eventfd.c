@@ -12,11 +12,12 @@
 
 #include "esp_err.h"
 #include "esp_vfs.h"
+#include "freertos/event_groups.h"
 #include "freertos/FreeRTOS.h"
 
 #include "sdkconfig.h"
 
-//FIXME make config
+// TODO(vtl): Make this a Kconfig value.
 #define MAX_NUM_EVENTFD 4
 
 #define LOCK_TYPE _lock_t
@@ -29,11 +30,19 @@
 
 // NOTE: xsp_eventfd_ctx_t's lock precedes xsp_eventfd_t's lock in the (acquisition) order.
 
+#define EFD_EVENT_DEC_BIT 1  // Used to wait for the value to decrease.
+#define EFD_EVENT_INC_BIT 2  // Used to wait for the value to increase.
+
 typedef struct xsp_eventfd_struct {
     LOCK_TYPE lock;
     unsigned refcount;
     uint64_t value;
     bool nonblock;
+    bool closed;
+
+    EventGroupHandle_t events;
+    unsigned dec_waiters;  // Number of things waiting for the value to decrease.
+    unsigned inc_waiters;  // Number of things waiting for the value to increase.
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
@@ -48,16 +57,15 @@ typedef struct xsp_eventfd_ctx {
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
 
-#if 0
 static void efd_ref_locked(xsp_eventfd_t* efd) {
     efd->refcount++;
 }
-#endif
 
 // Note: `efd` should be locked to call this, but it will be unlocked afterwards.
 static void efd_unref_locked(xsp_eventfd_t* efd) {
     if (efd->refcount == 1) {
         UNLOCK(&efd->lock);
+        vEventGroupDelete(efd->events);
         DEINIT_LOCK(&efd->lock);
         free(efd);
     } else {
@@ -113,40 +121,90 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
         return -1;
     }
 
+    // Assume everything is kosher if `to_add` is 0.
+    if (to_add == 0)
+        return 8;
+
     xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;  // errno already set.
+    efd_ref_locked(efd);
 
     while (efd->value + to_add < efd->value) {
         // Overflow. If nonblocking, fail; else block.
         if (efd->nonblock) {
-            UNLOCK(&efd->lock);
+            efd_unref_locked(efd);
             errno = EAGAIN;
             return -1;
         }
 
-//FIXME take ref, release lock, block, take lock, release ref
+        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
+
+        efd->dec_waiters++;
+        UNLOCK(&efd->lock);
+        xEventGroupWaitBits(efd->events, EFD_EVENT_DEC_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        LOCK(&efd->lock);
+        efd->dec_waiters--;
+        if (efd->closed) {
+            efd_unref_locked(efd);
+            errno = EBADF;  // TODO(vtl): Not sure about this error.
+            return -1;
+        }
+        if (efd->dec_waiters == 0)
+            xEventGroupClearBits(efd->events, EFD_EVENT_DEC_BIT);
     }
 
     efd->value += to_add;
-//FIXME unblock
 
-    UNLOCK(&efd->lock);
-//FIXME
-    return -1;
+    if (efd->inc_waiters > 0)
+        xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
+
+    efd_unref_locked(efd);
+    return 8;
 }
 
 static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
+    if (count < 8) {
+        errno = EINVAL;
+        return -1;
+    }
+
     xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;  // errno already set.
 
-//FIXME
+    while (efd->value == 0) {
+        // If nonblocking, fail; else block.
+        if (efd->nonblock) {
+            efd_unref_locked(efd);
+            errno = EAGAIN;
+            return -1;
+        }
 
-    UNLOCK(&efd->lock);
+        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
 
-//FIXME
-    return -1;
+        efd->inc_waiters++;
+        UNLOCK(&efd->lock);
+        xEventGroupWaitBits(efd->events, EFD_EVENT_INC_BIT, pdFALSE, pdFALSE, portMAX_DELAY);
+        LOCK(&efd->lock);
+        efd->inc_waiters--;
+        if (efd->closed) {
+            efd_unref_locked(efd);
+            errno = EBADF;  // TODO(vtl): Not sure about this error.
+            return -1;
+        }
+        if (efd->inc_waiters == 0)
+            xEventGroupClearBits(efd->events, EFD_EVENT_INC_BIT);
+    }
+
+    memcpy(buf, &efd->value, 8);
+    efd->value = 0;
+
+    if (efd->dec_waiters > 0)
+        xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT);
+
+    efd_unref_locked(efd);
+    return 8;
 }
 
 int efd_close_p(void* raw_ctx, int fd) {
@@ -166,7 +224,8 @@ int efd_close_p(void* raw_ctx, int fd) {
     LOCK(&efd->lock);
     UNLOCK(&ctx->lock);
 
-//FIXME wake up all waiters?
+    efd->closed = true;
+    xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT | EFD_EVENT_INC_BIT);
 
     efd_unref_locked(efd);
     return 0;
@@ -205,10 +264,19 @@ int xsp_eventfd(unsigned initval, int flags) {
         errno = ENOMEM;
         return -1;
     }
+    efd->events = xEventGroupCreate();
+    if (!efd->events) {
+        free(efd);
+        errno = ENOMEM;
+        return -1;
+    }
     INIT_LOCK(&efd->lock);
     efd->refcount = 1;
     efd->value = initval;
     efd->nonblock = !!(flags & XSP_EVENTFD_NONBLOCK);
+    efd->closed = false;
+    efd->dec_waiters = 0;
+    efd->inc_waiters = 0;
 
     LOCK(&g_eventfd_ctx->lock);
 
@@ -219,6 +287,7 @@ int xsp_eventfd(unsigned initval, int flags) {
     }
     if (idx == MAX_NUM_EVENTFD) {
         UNLOCK(&g_eventfd_ctx->lock);
+        vEventGroupDelete(efd->events);
         DEINIT_LOCK(&efd->lock);
         free(efd);
         errno = ENFILE;  // TODO(vtl): Not sure about this.
@@ -229,6 +298,7 @@ int xsp_eventfd(unsigned initval, int flags) {
     esp_err_t err = esp_vfs_register_fd(g_eventfd_vfs_id, &fd);
     if (err != ESP_OK) {
         UNLOCK(&g_eventfd_ctx->lock);
+        vEventGroupDelete(efd->events);
         DEINIT_LOCK(&efd->lock);
         free(efd);
         switch (err) {
