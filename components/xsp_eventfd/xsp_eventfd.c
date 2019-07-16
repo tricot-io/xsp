@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/lock.h>
 
 #include "esp_err.h"
 #include "esp_vfs.h"
@@ -18,13 +19,13 @@
 //FIXME make config
 #define MAX_NUM_EVENTFD 4
 
-#define LOCK_TYPE portMUX_TYPE
+#define LOCK_TYPE _lock_t
 
-#define INIT_LOCK(l) vPortCPUInitializeMutex(l)
-#define DEINIT_LOCK(l) do {} while(0)
+#define INIT_LOCK(l) _lock_init(l)
+#define DEINIT_LOCK(l) _lock_close(l)
 
-#define LOCK(l) portENTER_CRITICAL(l)
-#define UNLOCK(l) portEXIT_CRITICAL(l)
+#define LOCK(l) _lock_acquire(l)
+#define UNLOCK(l) _lock_release(l)
 
 // NOTE: xsp_eventfd_ctx_t's lock precedes xsp_eventfd_t's lock in the (acquisition) order.
 
@@ -218,6 +219,7 @@ int xsp_eventfd(unsigned initval, int flags) {
     }
     if (idx == MAX_NUM_EVENTFD) {
         UNLOCK(&g_eventfd_ctx->lock);
+        DEINIT_LOCK(&efd->lock);
         free(efd);
         errno = ENFILE;  // TODO(vtl): Not sure about this.
         return -1;
@@ -227,6 +229,7 @@ int xsp_eventfd(unsigned initval, int flags) {
     esp_err_t err = esp_vfs_register_fd(g_eventfd_vfs_id, &fd);
     if (err != ESP_OK) {
         UNLOCK(&g_eventfd_ctx->lock);
+        DEINIT_LOCK(&efd->lock);
         free(efd);
         switch (err) {
         case ESP_ERR_INVALID_ARG:
