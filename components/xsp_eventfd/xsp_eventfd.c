@@ -24,7 +24,7 @@
 
 typedef struct xsp_eventfd_struct {
     portMUX_TYPE mux;
-//FIXME we'll probably have to refcount this
+    unsigned refcount;
     uint64_t value;
 } xsp_eventfd_t;
 
@@ -39,6 +39,23 @@ typedef struct xsp_eventfd_ctx {
 
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
+
+#if 0
+static void efd_ref_locked(xsp_eventfd_t* efd) {
+    efd->refcount++;
+}
+#endif
+
+// Note: `efd` should be locked to call this, but it will be unlocked afterwards.
+static void efd_unref_locked(xsp_eventfd_t* efd) {
+    if (efd->refcount == 1) {
+        UNLOCK(&efd->mux);
+        free(efd);
+    } else {
+        efd->refcount--;
+        UNLOCK(&efd->mux);
+    }
+}
 
 static xsp_eventfd_t* efd_lookup_locked(xsp_eventfd_ctx_t* ctx, int fd, size_t* idx) {
     if (fd < 0)
@@ -55,8 +72,9 @@ static xsp_eventfd_t* efd_lookup_locked(xsp_eventfd_ctx_t* ctx, int fd, size_t* 
     return NULL;
 }
 
-// Looks up the given FD and returns its `xsp_eventfd_t` with its mux acquired. On failure, sets
-// errno and returns null.
+// Looks up the given FD and returns its `xsp_eventfd_t` with its mux acquired (but without
+// incrementing the refcount -- if the caller needs to persist the pointer after unlocking, it must
+// increment the refcount). On failure, sets errno and returns null.
 static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->mux);
@@ -117,8 +135,7 @@ int efd_close_p(void* raw_ctx, int fd) {
 
 //FIXME wake up all waiters?
 
-    UNLOCK(&efd->mux);
-    free(efd);
+    efd_unref_locked(efd);
     return 0;
 }
 
@@ -156,6 +173,7 @@ int xsp_eventfd(unsigned initval, int flags) {
         return -1;
     }
     vPortCPUInitializeMutex(&efd->mux);
+    efd->refcount = 1;
     efd->value = 0;
 
     LOCK(&g_eventfd_ctx->mux);
