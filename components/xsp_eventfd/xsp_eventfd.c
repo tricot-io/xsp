@@ -40,7 +40,7 @@ typedef struct xsp_eventfd_ctx {
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
 
-static xsp_eventfd_t* eventfd_lookup_no_lock(xsp_eventfd_ctx_t* ctx, int fd, size_t* idx) {
+static xsp_eventfd_t* efd_lookup_locked(xsp_eventfd_ctx_t* ctx, int fd, size_t* idx) {
     if (fd < 0)
         return NULL;
 
@@ -57,11 +57,11 @@ static xsp_eventfd_t* eventfd_lookup_no_lock(xsp_eventfd_ctx_t* ctx, int fd, siz
 
 // Looks up the given FD and returns its `xsp_eventfd_t` with its mux acquired. On failure, sets
 // errno and returns null.
-static xsp_eventfd_t* eventfd_lookup(void* raw_ctx, int fd) {
+static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->mux);
 
-    xsp_eventfd_t* efd = eventfd_lookup_no_lock(raw_ctx, fd, NULL);
+    xsp_eventfd_t* efd = efd_lookup_locked(raw_ctx, fd, NULL);
     if (!efd) {
         UNLOCK(&ctx->mux);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
@@ -73,8 +73,8 @@ static xsp_eventfd_t* eventfd_lookup(void* raw_ctx, int fd) {
     return efd;
 }
 
-static ssize_t eventfd_write_p(void* raw_ctx, int fd, const void * data, size_t size) {
-    xsp_eventfd_t* efd = eventfd_lookup(raw_ctx, fd);
+static ssize_t efd_write_p(void* raw_ctx, int fd, const void * data, size_t size) {
+    xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;
 
@@ -85,8 +85,8 @@ static ssize_t eventfd_write_p(void* raw_ctx, int fd, const void * data, size_t 
     return -1;
 }
 
-static ssize_t eventfd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
-    xsp_eventfd_t* efd = eventfd_lookup(raw_ctx, fd);
+static ssize_t efd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
+    xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;
 
@@ -98,12 +98,12 @@ static ssize_t eventfd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
     return -1;
 }
 
-int eventfd_close_p(void* raw_ctx, int fd) {
+int efd_close_p(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->mux);
 
     size_t idx;
-    xsp_eventfd_t* efd = eventfd_lookup_no_lock(ctx, fd, &idx);
+    xsp_eventfd_t* efd = efd_lookup_locked(ctx, fd, &idx);
     if (!efd) {
         UNLOCK(&ctx->mux);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
@@ -125,9 +125,9 @@ int eventfd_close_p(void* raw_ctx, int fd) {
 void xsp_eventfd_register() {
     static const esp_vfs_t vfs = {
             .flags = ESP_VFS_FLAG_CONTEXT_PTR,
-            .write_p = &eventfd_write_p,
-            .read_p = &eventfd_read_p,
-            .close_p = &eventfd_close_p,
+            .write_p = &efd_write_p,
+            .read_p = &efd_read_p,
+            .close_p = &efd_close_p,
     };
 
     ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL); 
@@ -155,6 +155,8 @@ int xsp_eventfd(unsigned initval, int flags) {
         errno = ENOMEM;
         return -1;
     }
+    vPortCPUInitializeMutex(&efd->mux);
+    efd->value = 0;
 
     LOCK(&g_eventfd_ctx->mux);
 
