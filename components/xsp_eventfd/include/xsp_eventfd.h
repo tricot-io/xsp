@@ -10,7 +10,7 @@ extern "C" {
 
 // TODO(vtl)
 // #define XSP_EVENTFD_SEMAPHORE 1
-#define XSP_EVENTFD_NONBLOCK  2
+#define XSP_EVENTFD_NONBLOCK 2
 
 void xsp_eventfd_register();
 

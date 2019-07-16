@@ -12,8 +12,8 @@
 
 #include "esp_err.h"
 #include "esp_vfs.h"
-#include "freertos/event_groups.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/event_groups.h"
 
 #include "sdkconfig.h"
 
@@ -239,7 +239,7 @@ void xsp_eventfd_register() {
             .close_p = &efd_close_p,
     };
 
-    ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL); 
+    ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL);
 
     xsp_eventfd_ctx_t* g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
     ESP_ERROR_CHECK(g_eventfd_ctx ? ESP_OK : ESP_ERR_NO_MEM);
