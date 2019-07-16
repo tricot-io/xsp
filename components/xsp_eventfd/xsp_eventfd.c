@@ -18,20 +18,25 @@
 //FIXME make config
 #define MAX_NUM_EVENTFD 4
 
-#define LOCK(mux) portENTER_CRITICAL(mux)
-#define UNLOCK(mux) portEXIT_CRITICAL(mux)
+#define LOCK_TYPE portMUX_TYPE
 
-// NOTE: xsp_eventfd_ctx_t's mux precedes xsp_eventfd_t's mux in the (acquisition) order.
+#define INIT_LOCK(l) vPortCPUInitializeMutex(l)
+#define DEINIT_LOCK(l) do {} while(0)
+
+#define LOCK(l) portENTER_CRITICAL(l)
+#define UNLOCK(l) portEXIT_CRITICAL(l)
+
+// NOTE: xsp_eventfd_ctx_t's lock precedes xsp_eventfd_t's lock in the (acquisition) order.
 
 typedef struct xsp_eventfd_struct {
-    portMUX_TYPE mux;
+    LOCK_TYPE lock;
     unsigned refcount;
     uint64_t value;
     bool nonblock;
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
-    portMUX_TYPE mux;
+    LOCK_TYPE lock;
     size_t num_eventfd;
     struct {
         int fd;  // Should be initialized to -1.
@@ -51,11 +56,12 @@ static void efd_ref_locked(xsp_eventfd_t* efd) {
 // Note: `efd` should be locked to call this, but it will be unlocked afterwards.
 static void efd_unref_locked(xsp_eventfd_t* efd) {
     if (efd->refcount == 1) {
-        UNLOCK(&efd->mux);
+        UNLOCK(&efd->lock);
+        DEINIT_LOCK(&efd->lock);
         free(efd);
     } else {
         efd->refcount--;
-        UNLOCK(&efd->mux);
+        UNLOCK(&efd->lock);
     }
 }
 
@@ -74,22 +80,22 @@ static xsp_eventfd_t* efd_lookup_locked(xsp_eventfd_ctx_t* ctx, int fd, size_t* 
     return NULL;
 }
 
-// Looks up the given FD and returns its `xsp_eventfd_t` with its mux acquired (but without
+// Looks up the given FD and returns its `xsp_eventfd_t` with its lock acquired (but without
 // incrementing the refcount -- if the caller needs to persist the pointer after unlocking, it must
 // increment the refcount). On failure, sets errno and returns null.
 static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
-    LOCK(&ctx->mux);
+    LOCK(&ctx->lock);
 
     xsp_eventfd_t* efd = efd_lookup_locked(raw_ctx, fd, NULL);
     if (!efd) {
-        UNLOCK(&ctx->mux);
+        UNLOCK(&ctx->lock);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
         return NULL;
     }
 
-    LOCK(&efd->mux);
-    UNLOCK(&ctx->mux);
+    LOCK(&efd->lock);
+    UNLOCK(&ctx->lock);
     return efd;
 }
 
@@ -113,18 +119,18 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
     while (efd->value + to_add < efd->value) {
         // Overflow. If nonblocking, fail; else block.
         if (efd->nonblock) {
-            UNLOCK(&efd->mux);
+            UNLOCK(&efd->lock);
             errno = EAGAIN;
             return -1;
         }
 
-//FIXME take ref, release mux, block, take mux, release ref
+//FIXME take ref, release lock, block, take lock, release ref
     }
 
     efd->value += to_add;
 //FIXME unblock
 
-    UNLOCK(&efd->mux);
+    UNLOCK(&efd->lock);
 //FIXME
     return -1;
 }
@@ -136,7 +142,7 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
 
 //FIXME
 
-    UNLOCK(&efd->mux);
+    UNLOCK(&efd->lock);
 
 //FIXME
     return -1;
@@ -144,20 +150,20 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
 
 int efd_close_p(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
-    LOCK(&ctx->mux);
+    LOCK(&ctx->lock);
 
     size_t idx;
     xsp_eventfd_t* efd = efd_lookup_locked(ctx, fd, &idx);
     if (!efd) {
-        UNLOCK(&ctx->mux);
+        UNLOCK(&ctx->lock);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
         return -1;
     }
 
     ctx->eventfds[idx].fd = -1;
     ctx->eventfds[idx].efd = NULL;
-    LOCK(&efd->mux);
-    UNLOCK(&ctx->mux);
+    LOCK(&efd->lock);
+    UNLOCK(&ctx->lock);
 
 //FIXME wake up all waiters?
 
@@ -177,7 +183,7 @@ void xsp_eventfd_register() {
 
     xsp_eventfd_ctx_t* g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
     ESP_ERROR_CHECK(g_eventfd_ctx ? ESP_OK : ESP_ERR_NO_MEM);
-    vPortCPUInitializeMutex(&g_eventfd_ctx->mux);
+    INIT_LOCK(&g_eventfd_ctx->lock);
     g_eventfd_ctx->num_eventfd = 0;
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         g_eventfd_ctx->eventfds[i].fd = -1;
@@ -198,12 +204,12 @@ int xsp_eventfd(unsigned initval, int flags) {
         errno = ENOMEM;
         return -1;
     }
-    vPortCPUInitializeMutex(&efd->mux);
+    INIT_LOCK(&efd->lock);
     efd->refcount = 1;
     efd->value = initval;
     efd->nonblock = !!(flags & XSP_EVENTFD_NONBLOCK);
 
-    LOCK(&g_eventfd_ctx->mux);
+    LOCK(&g_eventfd_ctx->lock);
 
     size_t idx = 0;
     for (; idx < MAX_NUM_EVENTFD; idx++) {
@@ -211,7 +217,7 @@ int xsp_eventfd(unsigned initval, int flags) {
             break;
     }
     if (idx == MAX_NUM_EVENTFD) {
-        UNLOCK(&g_eventfd_ctx->mux);
+        UNLOCK(&g_eventfd_ctx->lock);
         free(efd);
         errno = ENFILE;  // TODO(vtl): Not sure about this.
         return -1;
@@ -220,7 +226,7 @@ int xsp_eventfd(unsigned initval, int flags) {
     int fd;
     esp_err_t err = esp_vfs_register_fd(g_eventfd_vfs_id, &fd);
     if (err != ESP_OK) {
-        UNLOCK(&g_eventfd_ctx->mux);
+        UNLOCK(&g_eventfd_ctx->lock);
         free(efd);
         switch (err) {
         case ESP_ERR_INVALID_ARG:
@@ -238,6 +244,6 @@ int xsp_eventfd(unsigned initval, int flags) {
 
     g_eventfd_ctx->eventfds[idx].fd = fd;
     g_eventfd_ctx->eventfds[idx].efd = efd;
-    UNLOCK(&g_eventfd_ctx->mux);
+    UNLOCK(&g_eventfd_ctx->lock);
     return fd;
 }
