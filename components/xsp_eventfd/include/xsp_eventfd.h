@@ -8,6 +8,10 @@
 extern "C" {
 #endif
 
+// TODO(vtl)
+// #define XSP_EVENTFD_SEMAPHORE 1
+#define XSP_EVENTFD_NONBLOCK  2
+
 void xsp_eventfd_register();
 
 int xsp_eventfd(unsigned initval, int flags);

@@ -4,9 +4,10 @@
 #include "xsp_eventfd.h"
 
 #include <errno.h>
-#include <stddef.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "esp_err.h"
 #include "esp_vfs.h"
@@ -26,6 +27,7 @@ typedef struct xsp_eventfd_struct {
     portMUX_TYPE mux;
     unsigned refcount;
     uint64_t value;
+    bool nonblock;
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
@@ -91,22 +93,46 @@ static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     return efd;
 }
 
-static ssize_t efd_write_p(void* raw_ctx, int fd, const void * data, size_t size) {
+static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count) {
+    if (count < 8) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    uint64_t to_add;
+    memcpy(&to_add, buf, 8);
+    if (to_add == (uint64_t)-1) {
+        errno = EINVAL;
+        return -1;
+    }
+
     xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
-        return -1;
+        return -1;  // errno already set.
 
-//FIXME
+    while (efd->value + to_add < efd->value) {
+        // Overflow. If nonblocking, fail; else block.
+        if (efd->nonblock) {
+            UNLOCK(&efd->mux);
+            errno = EAGAIN;
+            return -1;
+        }
+
+//FIXME take ref, release mux, block, take mux, release ref
+    }
+
+    efd->value += to_add;
+//FIXME unblock
 
     UNLOCK(&efd->mux);
 //FIXME
     return -1;
 }
 
-static ssize_t efd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
+static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
-        return -1;
+        return -1;  // errno already set.
 
 //FIXME
 
@@ -174,7 +200,8 @@ int xsp_eventfd(unsigned initval, int flags) {
     }
     vPortCPUInitializeMutex(&efd->mux);
     efd->refcount = 1;
-    efd->value = 0;
+    efd->value = initval;
+    efd->nonblock = !!(flags & XSP_EVENTFD_NONBLOCK);
 
     LOCK(&g_eventfd_ctx->mux);
 
