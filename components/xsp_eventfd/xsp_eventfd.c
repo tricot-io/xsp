@@ -13,13 +13,11 @@
 
 #include "sdkconfig.h"
 
-static esp_vfs_id_t g_eventfd_vfs_id = -1;
-
 //FIXME make config
 #define MAX_NUM_EVENTFD 4
 
 typedef struct xsp_eventfd_struct {
-    int64_t value;
+    uint64_t value;
 //FIXME
 } xsp_eventfd_t;
 
@@ -31,6 +29,9 @@ typedef struct xsp_eventfd_ctx {
         xsp_eventfd_t* eventfd;
     } eventfds[MAX_NUM_EVENTFD];
 } xsp_eventfd_ctx_t;
+
+static esp_vfs_id_t g_eventfd_vfs_id = -1;
+static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
 
 static xsp_eventfd_t* eventfd_lookup_no_lock(void* raw_ctx, int fd, size_t* idx) {
     if (fd < 0)
@@ -101,18 +102,39 @@ void xsp_eventfd_register() {
             .close_p = &eventfd_close_p,
     };
 
-    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
-    ESP_ERROR_CHECK(ctx ? ESP_OK : ESP_ERR_NO_MEM);
-    ctx->num_eventfd = 0;
+    ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL); 
+
+    xsp_eventfd_ctx_t* g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
+    ESP_ERROR_CHECK(g_eventfd_ctx ? ESP_OK : ESP_ERR_NO_MEM);
+    g_eventfd_ctx->num_eventfd = 0;
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
-        ctx->eventfds[i].fd = -1;
-        ctx->eventfds[i].eventfd = NULL;
+        g_eventfd_ctx->eventfds[i].fd = -1;
+        g_eventfd_ctx->eventfds[i].eventfd = NULL;
     }
 
-    ESP_ERROR_CHECK(esp_vfs_register_with_id(&vfs, ctx, &g_eventfd_vfs_id));
+    ESP_ERROR_CHECK(esp_vfs_register_with_id(&vfs, g_eventfd_ctx, &g_eventfd_vfs_id));
 }
 
 int xsp_eventfd(unsigned initval, int flags) {
+    if (!g_eventfd_ctx) {
+        errno = EFAULT;
+        return -1;
+    }
+
+//FIXME take mutex
+
+    size_t idx = 0;
+    for (; idx < MAX_NUM_EVENTFD; idx++) {
+        if (g_eventfd_ctx->eventfds[idx].fd == -1)
+            break;
+    }
+    if (idx == MAX_NUM_EVENTFD) {
+//FIXME release mutex
+        errno = ENFILE;  // TODO(vtl): Not sure about this.
+        return -1;
+    }
+
+//FIXME release mutex
 //FIXME
     return -1;
 }
