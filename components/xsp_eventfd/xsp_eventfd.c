@@ -10,11 +10,15 @@
 
 #include "esp_err.h"
 #include "esp_vfs.h"
+#include "freertos/FreeRTOS.h"
 
 #include "sdkconfig.h"
 
 //FIXME make config
 #define MAX_NUM_EVENTFD 4
+
+#define LOCK(mux) portENTER_CRITICAL(mux)
+#define UNLOCK(mux) portEXIT_CRITICAL(mux)
 
 typedef struct xsp_eventfd_struct {
     uint64_t value;
@@ -22,7 +26,7 @@ typedef struct xsp_eventfd_struct {
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
-//FIXME need mutex
+    portMUX_TYPE mux;
     size_t num_eventfd;
     struct {
         int fd;  // Should be initialized to -1.
@@ -33,11 +37,10 @@ typedef struct xsp_eventfd_ctx {
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
 
-static xsp_eventfd_t* eventfd_lookup_no_lock(void* raw_ctx, int fd, size_t* idx) {
+static xsp_eventfd_t* eventfd_lookup_no_lock(xsp_eventfd_ctx_t* ctx, int fd, size_t* idx) {
     if (fd < 0)
         return NULL;
 
-    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         if (ctx->eventfds[i].fd == fd) {
             if (idx)
@@ -50,47 +53,60 @@ static xsp_eventfd_t* eventfd_lookup_no_lock(void* raw_ctx, int fd, size_t* idx)
 }
 
 static xsp_eventfd_t* eventfd_lookup(void* raw_ctx, int fd) {
-//FIXME take mutex
+    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
+    LOCK(&ctx->mux);
+
     xsp_eventfd_t* rv = eventfd_lookup_no_lock(raw_ctx, fd, NULL);
-//FIXME release mutex
-    if (!rv)
+    if (!rv) {
+        UNLOCK(&ctx->mux);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
+        return NULL;
+    }
+
+//FIXME take specific mutex
+    UNLOCK(&ctx->mux);
     return rv;
 }
 
-static ssize_t eventfd_write_p(void* ctx, int fd, const void * data, size_t size) {
-    xsp_eventfd_t* efd = eventfd_lookup(ctx, fd);
+static ssize_t eventfd_write_p(void* raw_ctx, int fd, const void * data, size_t size) {
+    xsp_eventfd_t* efd = eventfd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;
 
+//FIXME release specific mutex
 //FIXME
     return -1;
 }
 
-static ssize_t eventfd_read_p(void* ctx, int fd, void * dst, size_t size) {
-    xsp_eventfd_t* efd = eventfd_lookup(ctx, fd);
+static ssize_t eventfd_read_p(void* raw_ctx, int fd, void * dst, size_t size) {
+    xsp_eventfd_t* efd = eventfd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;
 
+//FIXME release specific mutex
 //FIXME
     return -1;
 }
 
-int eventfd_close_p(void* ctx, int fd) {
-//FIXME take mutex
+int eventfd_close_p(void* raw_ctx, int fd) {
+    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
+    LOCK(&ctx->mux);
 
     size_t idx;
     xsp_eventfd_t* efd = eventfd_lookup_no_lock(ctx, fd, &idx);
     if (!efd) {
-//FIXME release mutex
+        UNLOCK(&ctx->mux);
         errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
         return -1;
     }
 
+//FIXME remove entry
+//FIXME take specific mutex
+    UNLOCK(&ctx->mux);
+
 //FIXME wakeup all waiters?
 
-//FIXME release mutex
-//FIXME set errno
+//FIXME
     return -1;
 }
 
@@ -106,6 +122,7 @@ void xsp_eventfd_register() {
 
     xsp_eventfd_ctx_t* g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
     ESP_ERROR_CHECK(g_eventfd_ctx ? ESP_OK : ESP_ERR_NO_MEM);
+    vPortCPUInitializeMutex(&g_eventfd_ctx->mux);
     g_eventfd_ctx->num_eventfd = 0;
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         g_eventfd_ctx->eventfds[i].fd = -1;
@@ -121,7 +138,7 @@ int xsp_eventfd(unsigned initval, int flags) {
         return -1;
     }
 
-//FIXME take mutex
+    LOCK(&g_eventfd_ctx->mux);
 
     size_t idx = 0;
     for (; idx < MAX_NUM_EVENTFD; idx++) {
@@ -129,12 +146,14 @@ int xsp_eventfd(unsigned initval, int flags) {
             break;
     }
     if (idx == MAX_NUM_EVENTFD) {
-//FIXME release mutex
+        UNLOCK(&g_eventfd_ctx->mux);
         errno = ENFILE;  // TODO(vtl): Not sure about this.
         return -1;
     }
 
-//FIXME release mutex
+//FIXME register; set entry
+
+    UNLOCK(&g_eventfd_ctx->mux);
 //FIXME
     return -1;
 }

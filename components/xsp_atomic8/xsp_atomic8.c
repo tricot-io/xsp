@@ -10,10 +10,10 @@
 
 #define WEAK __attribute__((weak))
 
-static portMUX_TYPE atomic8_mux = portMUX_INITIALIZER_UNLOCKED;
+static portMUX_TYPE g_atomic8_mux = portMUX_INITIALIZER_UNLOCKED;
 
-#define LOCK() portENTER_CRITICAL(&atomic8_mux)
-#define UNLOCK() portEXIT_CRITICAL(&atomic8_mux)
+#define LOCK() portENTER_CRITICAL(&g_atomic8_mux)
+#define UNLOCK() portEXIT_CRITICAL(&g_atomic8_mux)
 
 WEAK uint64_t __atomic_load_8(uint64_t* ptr, int memorder) {
     LOCK();
