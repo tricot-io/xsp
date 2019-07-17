@@ -241,7 +241,7 @@ void xsp_eventfd_register() {
 
     ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL);
 
-    xsp_eventfd_ctx_t* g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
+    g_eventfd_ctx = (xsp_eventfd_ctx_t*)malloc(sizeof(xsp_eventfd_ctx_t));
     ESP_ERROR_CHECK(g_eventfd_ctx ? ESP_OK : ESP_ERR_NO_MEM);
     INIT_LOCK(&g_eventfd_ctx->lock);
     g_eventfd_ctx->num_eventfd = 0;
