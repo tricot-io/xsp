@@ -60,8 +60,10 @@ typedef struct xsp_eventfd_ctx {
     // Note: Only one select() at a time, which is unfortunate, but other VFSes have the same
     // limitation.
     SemaphoreHandle_t* select_signal;
-    fd_set* select_readfds;   // Only meaningful when select_signal is set.
-    fd_set* select_writefds;  // Only meaningful when select_signal is set.
+    fd_set select_readfds_in;     // Only meaningful when select_signal is set.
+    fd_set select_writefds_in;    // Only meaningful when select_signal is set.
+    fd_set* select_readfds_out;   // Only meaningful when select_signal is set.
+    fd_set* select_writefds_out;  // Only meaningful when select_signal is set.
 } xsp_eventfd_ctx_t;
 
 static const char TAG[] = "EVENTFD";
@@ -120,43 +122,43 @@ static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     return efd;
 }
 
-// Signals select() if still appropriate.
-static void maybe_signal_select(void* raw_ctx, int fd) {
-    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
-    LOCK(&ctx->lock);
-
-    if (!ctx->select_signal) {
-        UNLOCK(&ctx->lock);
+static void maybe_signal_select_locked(xsp_eventfd_ctx_t* ctx) {
+    if (!ctx->select_signal)
         return;
+
+    bool should_signal = false;
+    for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
+        int fd = g_eventfd_ctx->eventfds[i].fd;
+        if (fd == -1)
+            continue;
+
+        bool select_readable = !!FD_ISSET(fd, &g_eventfd_ctx->select_readfds_in);
+        bool select_writable = !!FD_ISSET(fd, &g_eventfd_ctx->select_writefds_in);
+        if (select_readable || select_writable) {
+            xsp_eventfd_t* efd = g_eventfd_ctx->eventfds[i].efd;
+            LOCK(&efd->lock);
+            uint64_t value = efd->value;
+            UNLOCK(&efd->lock);
+
+            if ((select_readable && value > 0) || (select_writable && value < (uint64_t)-1)) {
+                should_signal = true;
+                break;
+            }
+        }
     }
 
-    bool select_readable = g_eventfd_ctx->select_readfds
-            ? !!FD_ISSET(fd, g_eventfd_ctx->select_readfds) : false;
-    bool select_writable = g_eventfd_ctx->select_writefds
-            ? !!FD_ISSET(fd, g_eventfd_ctx->select_writefds) : false;
-    if (!select_readable && !select_writable) {
-        UNLOCK(&ctx->lock);
-        return;
-    }
-
-    xsp_eventfd_t* efd = efd_lookup_locked(raw_ctx, fd, NULL);
-    if (!efd) {
-        UNLOCK(&ctx->lock);
-        return;
-    }
-
-    bool is_readable = (efd->value > 0);
-    bool is_writable = (efd->value < (uint64_t)-1);
-
-    UNLOCK(&efd->lock);
-
-    bool should_signal = (select_readable && is_readable) || (select_writable && is_writable);
-    // TODO(vtl): Calling esp_vfs_select_triggered() under ctx->lock is slightly dodgy.
     if (should_signal) {
+        // TODO(vtl): Calling esp_vfs_select_triggered() under ctx->lock is slightly dodgy.
         // TODO(vtl): There's also esp_vfs_select_triggered_isr()....
         esp_vfs_select_triggered(ctx->select_signal);
     }
+}
 
+// Signals select() if still appropriate.
+static void maybe_signal_select(void* raw_ctx) {
+    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
+    LOCK(&ctx->lock);
+    maybe_signal_select_locked(ctx);
     UNLOCK(&ctx->lock);
 }
 
@@ -217,7 +219,7 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
     efd_unref_locked(efd);
 
     if (select_active)
-        maybe_signal_select(raw_ctx, fd);
+        maybe_signal_select(raw_ctx);
 
     return 8;
 }
@@ -269,7 +271,7 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     efd_unref_locked(efd);
 
     if (select_active)
-        maybe_signal_select(raw_ctx, fd);
+        maybe_signal_select(raw_ctx);
 
     return 8;
 }
@@ -291,6 +293,7 @@ int efd_close_p(void* raw_ctx, int fd) {
     LOCK(&efd->lock);
     UNLOCK(&ctx->lock);
 
+//FIXME check if select active
     efd->closed = true;
     xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT | EFD_EVENT_INC_BIT);
 
@@ -315,18 +318,24 @@ static esp_err_t efd_start_select(int nfds,
         return ESP_ERR_INVALID_STATE;
     }
     g_eventfd_ctx->select_signal = signal_sem;
-    g_eventfd_ctx->select_readfds = readfds;
-    g_eventfd_ctx->select_writefds = writefds;
+    if (readfds)
+        g_eventfd_ctx->select_readfds_in = *readfds;
+    else
+        FD_ZERO(&g_eventfd_ctx->select_readfds_in);
+    if (writefds)
+        g_eventfd_ctx->select_writefds_in = *writefds;
+    else
+        FD_ZERO(&g_eventfd_ctx->select_writefds_in);
+    g_eventfd_ctx->select_readfds_out = readfds;
+    g_eventfd_ctx->select_writefds_out = writefds;
 
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         int fd = g_eventfd_ctx->eventfds[i].fd;
         if (fd == -1)
             continue;
 
-        bool select_readable = g_eventfd_ctx->select_readfds
-                ? !!FD_ISSET(fd, g_eventfd_ctx->select_readfds) : false;
-        bool select_writable = g_eventfd_ctx->select_writefds
-                ? !!FD_ISSET(fd, g_eventfd_ctx->select_writefds) : false;
+        bool select_readable = !!FD_ISSET(fd, &g_eventfd_ctx->select_readfds_in);
+        bool select_writable = !!FD_ISSET(fd, &g_eventfd_ctx->select_writefds_in);
         if (select_readable || select_writable) {
             xsp_eventfd_t* efd = g_eventfd_ctx->eventfds[i].efd;
             LOCK(&efd->lock);
@@ -334,6 +343,8 @@ static esp_err_t efd_start_select(int nfds,
             UNLOCK(&efd->lock);
         }
     }
+
+    maybe_signal_select_locked(g_eventfd_ctx);
 
     UNLOCK(&g_eventfd_ctx->lock);
     return ESP_OK;
@@ -344,25 +355,35 @@ static void efd_end_select() {
 
     LOCK(&g_eventfd_ctx->lock);
 
+    assert(g_eventfd_ctx->select_signal);
+
     for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
         int fd = g_eventfd_ctx->eventfds[i].fd;
         if (fd == -1)
             continue;
 
-        bool select_readable = g_eventfd_ctx->select_readfds
-                ? !!FD_ISSET(fd, g_eventfd_ctx->select_readfds) : false;
-        bool select_writable = g_eventfd_ctx->select_writefds
-                ? !!FD_ISSET(fd, g_eventfd_ctx->select_writefds) : false;
+        bool select_readable = !!FD_ISSET(fd, &g_eventfd_ctx->select_readfds_in);
+        bool select_writable = !!FD_ISSET(fd, &g_eventfd_ctx->select_writefds_in);
         if (select_readable || select_writable) {
             xsp_eventfd_t* efd = g_eventfd_ctx->eventfds[i].efd;
             LOCK(&efd->lock);
+            uint64_t value = efd->value;
             efd->select_active = false;
             UNLOCK(&efd->lock);
+
+            if (select_readable && value > 0)
+                FD_SET(fd, g_eventfd_ctx->select_readfds_out);
+
+            if (select_writable && value < (uint64_t)-1)
+                FD_SET(fd, g_eventfd_ctx->select_writefds_out);
         }
     }
+
     g_eventfd_ctx->select_signal = NULL;
-    g_eventfd_ctx->select_readfds = NULL;
-    g_eventfd_ctx->select_writefds = NULL;
+    FD_ZERO(&g_eventfd_ctx->select_readfds_in);
+    FD_ZERO(&g_eventfd_ctx->select_writefds_in);
+    g_eventfd_ctx->select_readfds_out = NULL;
+    g_eventfd_ctx->select_writefds_out = NULL;
 
     UNLOCK(&g_eventfd_ctx->lock);
 }
@@ -388,8 +409,10 @@ void xsp_eventfd_register() {
         g_eventfd_ctx->eventfds[i].efd = NULL;
     }
     g_eventfd_ctx->select_signal = NULL;
-    g_eventfd_ctx->select_readfds = NULL;
-    g_eventfd_ctx->select_writefds = NULL;
+    FD_ZERO(&g_eventfd_ctx->select_readfds_in);
+    FD_ZERO(&g_eventfd_ctx->select_writefds_in);
+    g_eventfd_ctx->select_readfds_out = NULL;
+    g_eventfd_ctx->select_writefds_out = NULL;
 
     ESP_ERROR_CHECK(esp_vfs_register_with_id(&vfs, g_eventfd_ctx, &g_eventfd_vfs_id));
 }
