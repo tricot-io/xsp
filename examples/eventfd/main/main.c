@@ -31,8 +31,6 @@ static void task1(void* pvParameters) {
     sz = read(g_fd1, &value, sizeof(value));
     printf("[TASK1]   read: result=%d, value=%llu\n", (int)sz, (unsigned long long)value);
 
-    // TODO(vtl): Moar.
-
     printf("[TASK1] Terminating\n");
     vTaskDelete(NULL);
 }
@@ -45,7 +43,29 @@ static void task2(void* pvParameters) {
     ssize_t sz = read(g_fd1, &value, sizeof(value));
     printf("[TASK2]   read: result=%d, value=%llu\n", (int)sz, (unsigned long long)value);
 
-    // TODO(vtl): Moar.
+    do_sleep(100);
+
+    printf("[TASK2] Reading from fd1 ...\n");
+    value = (uint64_t)-1;
+    sz = read(g_fd1, &value, sizeof(value));
+    printf("[TASK2]   read: result=%d, value=%llu\n", (int)sz, (unsigned long long)value);
+
+    do_sleep(100);
+
+    printf("[TASK2] Reading from fd1 ...\n");
+    value = (uint64_t)-1;
+    sz = read(g_fd1, &value, sizeof(value));
+    printf("[TASK2]   read: result=%d, value=0x%llx\n", (int)sz, (unsigned long long)value);
+
+    printf("[TASK2] Reading from fd1 ...\n");
+    value = (uint64_t)-1;
+    sz = read(g_fd1, &value, sizeof(value));
+    printf("[TASK2]   read: result=%d, value=0x%llx\n", (int)sz, (unsigned long long)value);
+
+    printf("[TASK2] Reading from fd1 ...\n");
+    value = (uint64_t)-1;
+    sz = read(g_fd1, &value, sizeof(value));
+    printf("[TASK2]   read: result=%d, value=0x%llx\n", (int)sz, (unsigned long long)value);
 
     printf("[TASK2] Terminating\n");
     vTaskDelete(NULL);
@@ -86,7 +106,35 @@ void app_main(void) {
     sz = write(g_fd1, &value, sizeof(value));
     printf("[TASK0]   write: result=%d\n", (int)sz);
 
-    // TODO(vtl): Moar.
+    value = 44;
+    printf("[TASK0] Writing to fd1 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd1, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    value = 55;
+    printf("[TASK0] Writing to fd1 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd1, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    do_sleep(100);
+
+    value = 1ULL << 63;
+    printf("[TASK0] Writing to fd1 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd1, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    value = 1ULL << 63;
+    printf("[TASK0] Writing to fd1 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd1, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    do_sleep(100);
+
+    printf("[TASK0] Closing fd1 ...\n");
+    int result = close(g_fd1);
+    printf("[TASK0]   close: result=%d\n", result);
+
+    // TODO(vtl): Moar (e.g., nonblocking).
 
     do_sleep(10000);
 
