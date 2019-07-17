@@ -67,8 +67,8 @@ static void task2(void* pvParameters) {
     printf("[TASK2] Reading from fd1 ...\n");
     value = (uint64_t)-1;
     sz = read(g_fd1, &value, sizeof(value));
-    printf("[TASK2]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz, (unsigned long
-           long)value, errno);
+    printf("[TASK2]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz,
+           (unsigned long long)value, errno);
 
     printf("[TASK2] Terminating\n");
     vTaskDelete(NULL);
@@ -85,8 +85,8 @@ static void task3(void* pvParameters) {
     printf("[TASK3] Reading from fd2 ...\n");
     value = (uint64_t)-1;
     sz = read(g_fd2, &value, sizeof(value));
-    printf("[TASK3]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz, (unsigned long
-           long)value, errno);
+    printf("[TASK3]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz,
+           (unsigned long long)value, errno);
 
     do_sleep(2 * 100);
 
@@ -98,8 +98,8 @@ static void task3(void* pvParameters) {
     printf("[TASK3] Reading from fd2 ...\n");
     value = (uint64_t)-1;
     sz = read(g_fd2, &value, sizeof(value));
-    printf("[TASK3]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz, (unsigned long
-           long)value, errno);
+    printf("[TASK3]   read: result=%d, value=0x%llx, errno=%d\n", (int)sz,
+           (unsigned long long)value, errno);
 
     do_sleep(2 * 100);
 
