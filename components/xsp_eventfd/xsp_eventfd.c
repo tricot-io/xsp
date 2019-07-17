@@ -172,6 +172,7 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
     if (!efd)
         return -1;  // errno already set.
+    efd_ref_locked(efd);
 
     while (efd->value == 0) {
         // If nonblocking, fail; else block.
