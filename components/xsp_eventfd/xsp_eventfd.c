@@ -293,9 +293,12 @@ int efd_close_p(void* raw_ctx, int fd) {
     LOCK(&efd->lock);
     UNLOCK(&ctx->lock);
 
-//FIXME check if select active
     efd->closed = true;
     xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT | EFD_EVENT_INC_BIT);
+
+    if (efd->select_active)
+        ESP_LOGE(TAG, "Closing FD while it's being used in select()");  // TODO(vtl): Panic instead?
+    efd->select_active = false;
 
     efd_unref_locked(efd);
     return 0;
