@@ -70,6 +70,19 @@ static const char TAG[] = "EVENTFD";
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
 
+// Signals select() if still appropriate. Note that it's conceivable that this generates a spurious
+// wakeup, so using nonblocking mode is recommended.
+static void maybe_signal_select(void* raw_ctx) {
+    xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
+    LOCK(&ctx->lock);
+    if (ctx->select_signal) {
+        // TODO(vtl): There's also esp_vfs_select_triggered_isr()....
+        esp_vfs_select_triggered(ctx->select_signal);
+    }
+    // Else it's stale.
+    UNLOCK(&ctx->lock);
+}
+
 static void efd_ref_locked(xsp_eventfd_t* efd) {
     efd->refcount++;
 }
@@ -173,11 +186,17 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
     if (efd->inc_waiters > 0)
         xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
 
-    if (efd->select_readable) {
-        // TODO(vtl): FIXME
+    // We'll need to grab the global lock, so we need to release the EFD lock.
+    bool select_readable = efd->select_readable;
+    efd_unref_locked(efd);
+
+    if (select_readable) {
+        // TODO(vtl): BUG BUG BUG: Not only might this generate a spurious wakeup if the original
+        // select() terminated and another started, but the second may not even be watching for this
+        // FD to be readable. (The latter is a somewhat serious problem.)
+        maybe_signal_select(raw_ctx);
     }
 
-    efd_unref_locked(efd);
     return 8;
 }
 
@@ -227,7 +246,17 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
         // TODO(vtl): FIXME
     }
 
+    // We'll need to grab the global lock, so we need to release the EFD lock.
+    bool select_writable = efd->select_writable;
     efd_unref_locked(efd);
+
+    if (select_writable) {
+        // TODO(vtl): BUG BUG BUG: Not only might this generate a spurious wakeup if the original
+        // select() terminated and another started, but the second may not even be watching for this
+        // FD to be writable. (The latter is a somewhat serious problem.)
+        maybe_signal_select(raw_ctx);
+    }
+
     return 8;
 }
 
