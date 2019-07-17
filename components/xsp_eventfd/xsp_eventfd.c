@@ -3,14 +3,17 @@
 
 #include "xsp_eventfd.h"
 
+#include <assert.h>
 #include <errno.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/lock.h>
+#include <sys/select.h>
 
 #include "esp_err.h"
+#include "esp_log.h"
 #include "esp_vfs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
@@ -43,6 +46,9 @@ typedef struct xsp_eventfd_struct {
     EventGroupHandle_t events;
     unsigned dec_waiters;  // Number of things waiting for the value to decrease.
     unsigned inc_waiters;  // Number of things waiting for the value to increase.
+
+    bool select_readable;
+    bool select_writable;
 } xsp_eventfd_t;
 
 typedef struct xsp_eventfd_ctx {
@@ -52,7 +58,14 @@ typedef struct xsp_eventfd_ctx {
         int fd;  // Should be initialized to -1.
         xsp_eventfd_t* efd;
     } eventfds[MAX_NUM_EVENTFD];
+    // Note: Only one select() at a time, which is unfortunate, but other VFSes have the same
+    // limitation.
+    SemaphoreHandle_t* select_signal;
+    fd_set select_readfds;   // Only meaningful when select_signal is set.
+    fd_set select_writefds;  // Only meaningful when select_signal is set.
 } xsp_eventfd_ctx_t;
+
+static const char TAG[] = "EVENTFD";
 
 static esp_vfs_id_t g_eventfd_vfs_id = -1;
 static xsp_eventfd_ctx_t* g_eventfd_ctx = NULL;
@@ -99,7 +112,7 @@ static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     xsp_eventfd_t* efd = efd_lookup_locked(raw_ctx, fd, NULL);
     if (!efd) {
         UNLOCK(&ctx->lock);
-        errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
+        errno = EBADF;  // TODO(vtl): This can't happen, I think?
         return NULL;
     }
 
@@ -147,7 +160,8 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
         efd->dec_waiters--;
         if (efd->closed) {
             efd_unref_locked(efd);
-            errno = EBADF;  // TODO(vtl): Not sure about this error.
+            ESP_LOGE(TAG, "FD closed while blocked in write()");
+            errno = EBADF;  // TODO(vtl): Not sure about this error code.
             return -1;
         }
         if (efd->dec_waiters == 0)
@@ -158,6 +172,10 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
 
     if (efd->inc_waiters > 0)
         xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
+
+    if (efd->select_readable) {
+        // TODO(vtl): FIXME
+    }
 
     efd_unref_locked(efd);
     return 8;
@@ -191,7 +209,8 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
         efd->inc_waiters--;
         if (efd->closed) {
             efd_unref_locked(efd);
-            errno = EBADF;  // TODO(vtl): Not sure about this error.
+            ESP_LOGE(TAG, "FD closed while blocked in read()");
+            errno = EBADF;  // TODO(vtl): Not sure about this error code.
             return -1;
         }
         if (efd->inc_waiters == 0)
@@ -203,6 +222,10 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
 
     if (efd->dec_waiters > 0)
         xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT);
+
+    if (efd->select_writable) {
+        // TODO(vtl): FIXME
+    }
 
     efd_unref_locked(efd);
     return 8;
@@ -216,7 +239,7 @@ int efd_close_p(void* raw_ctx, int fd) {
     xsp_eventfd_t* efd = efd_lookup_locked(ctx, fd, &idx);
     if (!efd) {
         UNLOCK(&ctx->lock);
-        errno = EBADF;  // TODO(vtl): This shouldn't happen, I think?
+        errno = EBADF;  // TODO(vtl): This can't happen, I think?
         return -1;
     }
 
@@ -232,12 +255,79 @@ int efd_close_p(void* raw_ctx, int fd) {
     return 0;
 }
 
+static esp_err_t efd_start_select(int nfds,
+                                  fd_set* readfds,
+                                  fd_set* writefds,
+                                  fd_set* exceptfds,
+                                  SemaphoreHandle_t* signal_sem) {
+    if (!g_eventfd_ctx)
+        return ESP_ERR_INVALID_STATE;  // TODO(vtl): This can't happen, I think?
+    if (!signal_sem)
+        return ESP_ERR_INVALID_ARG;
+
+    LOCK(&g_eventfd_ctx->lock);
+
+    if (g_eventfd_ctx->select_signal) {
+        UNLOCK(&g_eventfd_ctx->lock);
+        return ESP_ERR_INVALID_STATE;
+    }
+    g_eventfd_ctx->select_signal = signal_sem;
+    g_eventfd_ctx->select_readfds = *readfds;
+    g_eventfd_ctx->select_writefds = *writefds;
+
+    for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
+        if (g_eventfd_ctx->eventfds[i].fd == -1)
+            continue;
+
+        bool select_readable = !!FD_ISSET(g_eventfd_ctx->eventfds[i].fd,
+                                          &g_eventfd_ctx->select_readfds);
+        bool select_writable = !!FD_ISSET(g_eventfd_ctx->eventfds[i].fd,
+                                          &g_eventfd_ctx->select_writefds);
+        if (!select_readable && !select_writable)
+            continue;
+
+        xsp_eventfd_t* efd = g_eventfd_ctx->eventfds[i].efd;
+        LOCK(&efd->lock);
+        efd->select_readable = select_readable;
+        efd->select_writable = select_writable;
+        UNLOCK(&efd->lock);
+    }
+
+    UNLOCK(&g_eventfd_ctx->lock);
+    return ESP_OK;
+}
+
+static void efd_end_select() {
+    assert(g_eventfd_ctx);
+
+    LOCK(&g_eventfd_ctx->lock);
+
+    for (size_t i = 0; i < MAX_NUM_EVENTFD; i++) {
+        if (g_eventfd_ctx->eventfds[i].fd == -1)
+            continue;
+
+        if (FD_ISSET(g_eventfd_ctx->eventfds[i].fd, &g_eventfd_ctx->select_readfds) ||
+            FD_ISSET(g_eventfd_ctx->eventfds[i].fd, &g_eventfd_ctx->select_writefds)) {
+            xsp_eventfd_t* efd = g_eventfd_ctx->eventfds[i].efd;
+            LOCK(&efd->lock);
+            efd->select_readable = false;
+            efd->select_writable = false;
+            UNLOCK(&efd->lock);
+        }
+    }
+    g_eventfd_ctx->select_signal = NULL;
+
+    UNLOCK(&g_eventfd_ctx->lock);
+}
+
 void xsp_eventfd_register() {
     static const esp_vfs_t vfs = {
             .flags = ESP_VFS_FLAG_CONTEXT_PTR,
             .write_p = &efd_write_p,
             .read_p = &efd_read_p,
             .close_p = &efd_close_p,
+            .start_select = &efd_start_select,
+            .end_select = &efd_end_select,
     };
 
     ESP_ERROR_CHECK(!g_eventfd_ctx ? ESP_OK : ESP_FAIL);
@@ -250,6 +340,7 @@ void xsp_eventfd_register() {
         g_eventfd_ctx->eventfds[i].fd = -1;
         g_eventfd_ctx->eventfds[i].efd = NULL;
     }
+    g_eventfd_ctx->select_signal = NULL;
 
     ESP_ERROR_CHECK(esp_vfs_register_with_id(&vfs, g_eventfd_ctx, &g_eventfd_vfs_id));
 }
@@ -278,6 +369,8 @@ int xsp_eventfd(unsigned initval, int flags) {
     efd->closed = false;
     efd->dec_waiters = 0;
     efd->inc_waiters = 0;
+    efd->select_readable = false;
+    efd->select_writable = false;
 
     LOCK(&g_eventfd_ctx->lock);
 
@@ -291,7 +384,7 @@ int xsp_eventfd(unsigned initval, int flags) {
         vEventGroupDelete(efd->events);
         DEINIT_LOCK(&efd->lock);
         free(efd);
-        errno = ENFILE;  // TODO(vtl): Not sure about this.
+        errno = ENFILE;  // TODO(vtl): Not sure about this error code.
         return -1;
     }
 
