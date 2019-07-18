@@ -291,6 +291,10 @@ int efd_close_p(void* raw_ctx, int fd) {
     ctx->eventfds[idx].fd = -1;
     ctx->eventfds[idx].efd = NULL;
     LOCK(&efd->lock);
+
+    // TODO(vtl): Calling this under lock is slightly dubious.
+    // TODO(vtl): Check error?
+    esp_vfs_unregister_fd(g_eventfd_vfs_id, fd);
     UNLOCK(&ctx->lock);
 
     efd->closed = true;
