@@ -128,6 +128,27 @@ static void task3(void* pvParameters) {
     vTaskDelete(NULL);
 }
 
+static void task4(void* pvParameters) {
+    printf("[TASK4] Started\n");
+
+    do_sleep(100);
+
+    printf("[TASK4] Reading from fd3 ...\n");
+    uint64_t value = (uint64_t)-1;
+    ssize_t sz = read(g_fd3, &value, sizeof(value));
+    printf("[TASK4]   read: result=%d, value=0x%llx\n", (int)sz, (unsigned long long)value);
+
+    do_sleep(100);
+
+    value = 123;
+    printf("[TASK4] Writing to fd3 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd3, &value, sizeof(value));
+    printf("[TASK4]   write: result=%d\n", (int)sz);
+
+    printf("[TASK4] Terminating\n");
+    vTaskDelete(NULL);
+}
+
 void app_main(void) {
     printf("[TASK0] Starting\n");
 
@@ -221,9 +242,15 @@ void app_main(void) {
     g_fd3 = xsp_eventfd(0, XSP_EVENTFD_NONBLOCK);
     printf("[TASK0]   fd3=%d\n", g_fd3);
 
+    do_sleep(3 * 100);
+
     static const struct timeval k100ms = {
             .tv_sec = 0,
             .tv_usec = 100 * 1000,
+    };
+    static const struct timeval k500ms = {
+            .tv_sec = 0,
+            .tv_usec = 500 * 1000,
     };
     fd_set readfds;
     fd_set writefds;
@@ -234,14 +261,79 @@ void app_main(void) {
     FD_ZERO(&writefds);
     FD_SET(g_fd3, &writefds);
     timeout = k100ms;
-    // Should be writable.
-    printf("[TASK0] Selecting on fd3 ...\n");
+    printf("[TASK0] Selecting on fd3 (read/write) ...\n");
     result = select(g_fd3 + 1, &readfds, &writefds, NULL, &timeout);
     printf("[TASK0]   select: result=%d\n", result);
+    // Should (only) be writable.
     print_fd_set("[TASK0]     readfds=", &readfds);
     print_fd_set("[TASK0]     writefds=", &writefds);
 
-    // TODO(vtl): More.
+    value = 1;
+    printf("[TASK0] Writing to fd3 (value=%llu) ...\n", (unsigned long long)value);
+    sz = write(g_fd3, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    FD_ZERO(&readfds);
+    FD_SET(g_fd3, &readfds);
+    FD_ZERO(&writefds);
+    FD_SET(g_fd3, &writefds);
+    timeout = k100ms;
+    printf("[TASK0] Selecting on fd3 (read/write) ...\n");
+    result = select(g_fd3 + 1, &readfds, &writefds, NULL, &timeout);
+    printf("[TASK0]   select: result=%d\n", result);
+    // Should be readable and writable.
+    print_fd_set("[TASK0]     readfds=", &readfds);
+    print_fd_set("[TASK0]     writefds=", &writefds);
+
+    value = (uint64_t)-2;
+    printf("[TASK0] Writing to fd3 (value=0x%llx) ...\n", (unsigned long long)value);
+    sz = write(g_fd3, &value, sizeof(value));
+    printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    FD_ZERO(&readfds);
+    FD_SET(g_fd3, &readfds);
+    FD_ZERO(&writefds);
+    FD_SET(g_fd3, &writefds);
+    timeout = k100ms;
+    printf("[TASK0] Selecting on fd3 (read/write) ...\n");
+    result = select(g_fd3 + 1, &readfds, &writefds, NULL, &timeout);
+    printf("[TASK0]   select: result=%d\n", result);
+    // Should (only) be readable.
+    print_fd_set("[TASK0]     readfds=", &readfds);
+    print_fd_set("[TASK0]     writefds=", &writefds);
+
+    FD_ZERO(&writefds);
+    FD_SET(g_fd3, &writefds);
+    timeout = k100ms;
+    printf("[TASK0] Selecting on fd3 (read/write) ...\n");
+    result = select(g_fd3 + 1, NULL, &writefds, NULL, &timeout);
+    printf("[TASK0]   select: result=%d\n", result);
+    // Should time out.
+
+    printf("[TASK0] Creating TASK4\n");
+    xTaskCreate(&task4, "TASK4", 8192, NULL, 5, NULL);
+
+    FD_ZERO(&writefds);
+    FD_SET(g_fd3, &writefds);
+    timeout = k500ms;
+    printf("[TASK0] Selecting on fd3 (write) ...\n");
+    result = select(g_fd3 + 1, NULL, &writefds, NULL, &timeout);
+    printf("[TASK0]   select: result=%d\n", result);
+    // Should be writable.
+    print_fd_set("[TASK0]     writefds=", &writefds);
+
+    FD_ZERO(&readfds);
+    FD_SET(g_fd3, &readfds);
+    timeout = k500ms;
+    printf("[TASK0] Selecting on fd3 (read) ...\n");
+    result = select(g_fd3 + 1, &readfds, NULL, NULL, &timeout);
+    printf("[TASK0]   select: result=%d\n", result);
+    // Should be readable.
+    print_fd_set("[TASK0]     readfds=", &readfds);
+
+    printf("[TASK0] Closing fd3 ...\n");
+    result = close(g_fd3);
+    printf("[TASK0]   close: result=%d\n", result);
 
     do_sleep(10000);
 
