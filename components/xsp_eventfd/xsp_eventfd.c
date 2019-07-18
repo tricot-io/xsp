@@ -374,11 +374,18 @@ static void efd_end_select() {
             efd->select_active = false;
             UNLOCK(&efd->lock);
 
-            if (select_readable && value > 0)
-                FD_SET(fd, g_eventfd_ctx->select_readfds_out);
-
-            if (select_writable && value < (uint64_t)-1)
-                FD_SET(fd, g_eventfd_ctx->select_writefds_out);
+            if (select_readable) {
+                if (value > 0)
+                    FD_SET(fd, g_eventfd_ctx->select_readfds_out);
+                else
+                    FD_CLR(fd, g_eventfd_ctx->select_readfds_out);
+            }
+            if (select_writable) {
+                if (value < (uint64_t)-1)
+                    FD_SET(fd, g_eventfd_ctx->select_writefds_out);
+                else
+                    FD_CLR(fd, g_eventfd_ctx->select_writefds_out);
+            }
         }
     }
 
