@@ -276,7 +276,7 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     return 8;
 }
 
-int efd_close_p(void* raw_ctx, int fd) {
+static int efd_close_p(void* raw_ctx, int fd) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->lock);
 
