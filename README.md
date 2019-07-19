@@ -9,8 +9,8 @@ This currently requires a slightly modified ESP-IDF v3.2.2 from
 https://github.com/tricot-io/esp-idf:
 
 *   branch: `release/v3.2.2-tricot`
-*   commit: `0ebe7e8e758ca6cd40c4c700ac5375f0de062a44`
-*   tag: `v3.2.2-tricot1.1.0`
+*   commit: `e0ce353f55387fad9de3c4325ba149cc93106674
+*   tag: `v3.2.2-tricot1.2.0`
 
 ## Components
 

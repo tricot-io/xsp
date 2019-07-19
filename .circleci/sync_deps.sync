@@ -13,7 +13,7 @@ if got_new or not path_exists('xtensa-esp32-elf'):
 
 # Use our fork of esp-idf; don't do a shallow fetch to help with development.
 add_repo('esp-idf', 'https://github.com/tricot-io/esp-idf.git',
-         '0ebe7e8e758ca6cd40c4c700ac5375f0de062a44')
+         'e0ce353f55387fad9de3c4325ba149cc93106674')
 sync('/home/circleci')
 
 # TODO(vtl): --depth=1 (or even 100) fails with "error: Server does not allow request for
