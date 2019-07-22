@@ -4,6 +4,8 @@
 #include "xsp_loop.h"
 
 #include <stdlib.h>
+#include <string.h>
+#include <sys/lock.h>
 #include <sys/queue.h>
 #include <sys/select.h>
 #include <sys/time.h>
@@ -12,6 +14,14 @@
 #include "esp_transport_utils.h"
 
 #include "sdkconfig.h"
+
+#define LOCK_TYPE _lock_t
+
+#define INIT_LOCK(l) _lock_init(l)
+#define DEINIT_LOCK(l) _lock_close(l)
+
+#define LOCK(l) _lock_acquire(l)
+#define UNLOCK(l) _lock_release(l)
 
 typedef struct xsp_loop_fd_watcher {
     xsp_loop_fd_event_handler_t fd_evt_handler;
@@ -25,6 +35,16 @@ typedef struct xsp_loop {
     bool is_running;
     bool should_stop;
 
+    // Protects event_queue....
+    LOCK_TYPE event_queue_lock;
+    // Size is config.custom_event_data_size * config.custom_event_queue_size.
+    char* event_queue;
+    int event_queue_head;
+    int event_queue_count;
+
+    // Only accessed from the loop task.
+    void* event_data_bounce_buffer;  // Size is config.custom_event_data_size.
+
     SLIST_HEAD(fd_watchers_head, xsp_loop_fd_watcher) fd_watchers_head;
 } xsp_loop_t;
 
@@ -34,13 +54,49 @@ static const char TAG[] = "LOOP";
 #error "Invalid value for CONFIG_XSP_LOOP_DEFAULT_..."
 #endif
 
-const xsp_loop_config_t xsp_loop_config_default = {CONFIG_XSP_LOOP_DEFAULT_POLL_TIMEOUT_MS};
+const xsp_loop_config_t xsp_loop_config_default = {
+        CONFIG_XSP_LOOP_DEFAULT_POLL_TIMEOUT_MS,
+        8,   // Data size. TODO(vtl): Add config.
+        16,  // Queue size. TODO(vtl): Add config.
+};
 
 static bool validate_config(const xsp_loop_config_t* config) {
     if (!config)
         return true;
     if (config->poll_timeout_ms < 0)
         return false;
+    if (config->custom_event_data_size < 0)
+        return false;
+    if (config->custom_event_queue_size < 0)
+        return false;
+    // TODO(vtl): Should make sure that config->custom_event_data_size *
+    // config->custom_event_queue_size doesn't overflow.
+    return true;
+}
+
+static void* event_queue_entry_locked(xsp_loop_handle_t loop, int raw_idx) {
+    return &loop->event_queue[raw_idx * loop->config.custom_event_data_size];
+}
+
+static bool event_queue_pop_head_locked(xsp_loop_handle_t loop) {
+    if (loop->event_queue_count == 0)
+        return false;
+
+    memcpy(loop->event_data_bounce_buffer, event_queue_entry_locked(loop, loop->event_queue_head),
+           loop->config.custom_event_data_size);
+    loop->event_queue_head = (loop->event_queue_head + 1) % loop->config.custom_event_queue_size;
+    loop->event_queue_count--;
+    return true;
+}
+
+static bool event_queue_push_tail_locked(xsp_loop_handle_t loop, const void* data) {
+    if (loop->event_queue_count == loop->config.custom_event_queue_size)
+        return false;
+
+    int raw_idx = (loop->event_queue_head + loop->event_queue_count) %
+            loop->config.custom_event_queue_size;
+    memcpy(event_queue_entry_locked(loop, raw_idx), data, loop->config.custom_event_data_size);
+    loop->event_queue_count++;
     return true;
 }
 
@@ -63,6 +119,29 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
     loop->config = *config;
     if (evt_handler)
         loop->evt_handler = *evt_handler;
+
+    INIT_LOCK(&loop->event_queue_lock);
+    size_t size = (size_t)config->custom_event_data_size * (size_t)config->custom_event_queue_size;
+    if (size > 0) {
+        loop->event_queue = (char*)malloc(size);
+        if (!loop->event_queue) {
+            ESP_LOGE(TAG, "Allocation failed");
+            DEINIT_LOCK(&loop->event_queue_lock);
+            free(loop);
+            return NULL;
+        }
+    }
+
+    if (config->custom_event_data_size > 0) {
+        loop->event_data_bounce_buffer = malloc((size_t)config->custom_event_data_size);
+        if (!loop->event_data_bounce_buffer) {
+            ESP_LOGE(TAG, "Allocation failed");
+            free(loop->event_queue);
+            DEINIT_LOCK(&loop->event_queue_lock);
+            free(loop);
+            return NULL;
+        }
+    }
 
     SLIST_INIT(&loop->fd_watchers_head);
 
@@ -89,7 +168,24 @@ esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {
         free(fd_watcher);
     }
 
+    free(loop->event_data_bounce_buffer);
+    free(loop->event_queue);
+    DEINIT_LOCK(&loop->event_queue_lock);
     free(loop);
+    return ESP_OK;
+}
+
+esp_err_t xsp_loop_post_custom_event(xsp_loop_handle_t loop, const void* data) {
+    LOCK(&loop->event_queue_lock);
+
+    if (!event_queue_push_tail_locked(loop, data)) {
+        UNLOCK(&loop->event_queue_lock);
+        return ESP_FAIL;
+    }
+
+//FIXME wake
+
+    UNLOCK(&loop->event_queue_lock);
     return ESP_OK;
 }
 

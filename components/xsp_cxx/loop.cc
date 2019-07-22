@@ -11,7 +11,7 @@ namespace xsp {
 
 Loop::Loop(LoopEventHandler* loop_event_handler) : loop_event_handler_(loop_event_handler) {
     xsp_loop_event_handler_t loop_evt_handler = {&Loop::OnLoopStartThunk, &Loop::OnLoopStopThunk,
-                                                 &Loop::OnLoopIdleThunk, this};
+                                                 &Loop::OnLoopIdleThunk, nullptr, this};
     handle_ = xsp_loop_init(nullptr, &loop_evt_handler);
     assert(handle_);
 }

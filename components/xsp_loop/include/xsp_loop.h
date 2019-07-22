@@ -14,6 +14,8 @@ extern "C" {
 
 typedef struct xsp_loop_config {
     int poll_timeout_ms;
+    int custom_event_data_size;
+    int custom_event_queue_size;
 } xsp_loop_config_t;
 
 typedef struct xsp_loop* xsp_loop_handle_t;
@@ -21,11 +23,13 @@ typedef struct xsp_loop* xsp_loop_handle_t;
 typedef void (*on_loop_start_func_t)(xsp_loop_handle_t loop, void* ctx);
 typedef void (*on_loop_stop_func_t)(xsp_loop_handle_t loop, void* ctx);
 typedef void (*on_loop_idle_func_t)(xsp_loop_handle_t loop, void* ctx);
+typedef void (*on_loop_custom_event_func_t)(xsp_loop_handle_t loop, void* ctx, void* data);
 
 typedef struct xsp_loop_event_handler {
     on_loop_start_func_t on_loop_start;
     on_loop_stop_func_t on_loop_stop;
     on_loop_idle_func_t on_loop_idle;
+    on_loop_custom_event_func_t on_loop_custom_event;
 
     void* ctx;
 } xsp_loop_event_handler_t;
@@ -63,6 +67,9 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
 
 // Cleans up (shuts down) the loop, which must not be running.
 esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop);
+
+//FIXME
+esp_err_t xsp_loop_post_custom_event(xsp_loop_handle_t loop, const void* data);
 
 // Returns true if the loop is running.
 bool xsp_loop_is_running(xsp_loop_handle_t loop);
