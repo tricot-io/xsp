@@ -8,7 +8,6 @@ set(COMPONENT_SRCS
 set(COMPONENT_REQUIRES
     # TODO(vtl): This is a bit of an odd dependency.
     tcp_transport
-    xsp_eventfd
 )
 
 set(COMPONENT_ADD_INCLUDEDIRS include)

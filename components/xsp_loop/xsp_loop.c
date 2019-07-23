@@ -3,19 +3,15 @@
 
 #include "xsp_loop.h"
 
-#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/lock.h>
 #include <sys/queue.h>
 #include <sys/select.h>
 #include <sys/time.h>
-#include <unistd.h>
 
 #include "esp_log.h"
 #include "esp_transport_utils.h"
-
-#include "xsp_eventfd.h"
 
 #include "sdkconfig.h"
 
@@ -45,7 +41,6 @@ typedef struct xsp_loop {
     char* event_queue;
     int event_queue_head;
     int event_queue_count;
-    int event_queue_wake_fd;
 
     // Only accessed from the loop task.
     void* event_data_bounce_buffer;  // Size is config.custom_event_data_size.
@@ -126,41 +121,26 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
         loop->evt_handler = *evt_handler;
 
     INIT_LOCK(&loop->event_queue_lock);
-    if (config->custom_event_queue_size > 0) {
-        size_t size = (size_t)config->custom_event_data_size *
-                (size_t)config->custom_event_queue_size;
-        if (size > 0) {
-            loop->event_queue = (char*)malloc(size);
-            if (!loop->event_queue) {
-                ESP_LOGE(TAG, "Allocation failed");
-                DEINIT_LOCK(&loop->event_queue_lock);
-                free(loop);
-                return NULL;
-            }
+    size_t size = (size_t)config->custom_event_data_size * (size_t)config->custom_event_queue_size;
+    if (size > 0) {
+        loop->event_queue = (char*)malloc(size);
+        if (!loop->event_queue) {
+            ESP_LOGE(TAG, "Allocation failed");
+            DEINIT_LOCK(&loop->event_queue_lock);
+            free(loop);
+            return NULL;
         }
+    }
 
-        if (config->custom_event_data_size > 0) {
-            loop->event_data_bounce_buffer = malloc((size_t)config->custom_event_data_size);
-            if (!loop->event_data_bounce_buffer) {
-                ESP_LOGE(TAG, "Allocation failed");
-                free(loop->event_queue);
-                DEINIT_LOCK(&loop->event_queue_lock);
-                free(loop);
-                return NULL;
-            }
-        }
-
-        loop->event_queue_wake_fd = xsp_eventfd(0, XSP_EVENTFD_NONBLOCK);
-        if (loop->event_queue_wake_fd == -1) {
-            ESP_LOGE(TAG, "Eventfd creation failed");
-            free(loop->event_data_bounce_buffer);
+    if (config->custom_event_data_size > 0) {
+        loop->event_data_bounce_buffer = malloc((size_t)config->custom_event_data_size);
+        if (!loop->event_data_bounce_buffer) {
+            ESP_LOGE(TAG, "Allocation failed");
             free(loop->event_queue);
             DEINIT_LOCK(&loop->event_queue_lock);
             free(loop);
             return NULL;
         }
-    } else {
-        loop->event_queue_wake_fd = -1;
     }
 
     SLIST_INIT(&loop->fd_watchers_head);
@@ -188,8 +168,6 @@ esp_err_t xsp_loop_cleanup(xsp_loop_handle_t loop) {
         free(fd_watcher);
     }
 
-    if (loop->event_queue_wake_fd != -1)
-        close(loop->event_queue_wake_fd);
     free(loop->event_data_bounce_buffer);
     free(loop->event_queue);
     DEINIT_LOCK(&loop->event_queue_lock);
@@ -205,9 +183,7 @@ esp_err_t xsp_loop_post_custom_event(xsp_loop_handle_t loop, const void* data) {
         return ESP_FAIL;
     }
 
-    uint64_t inc = 1;
-    int result = write(loop->event_queue_wake_fd, &inc, sizeof(inc));
-    assert(result == 8);
+//FIXME wake
 
     UNLOCK(&loop->event_queue_lock);
     return ESP_OK;
