@@ -181,7 +181,7 @@ static void ws_client_example_task(void* pvParameters) {
     esp_err_t err;
     xsp_ws_client_handle_t client = NULL;
     loop_context_t ctx = {};
-    xsp_loop_event_handler_t loop_evt_handler = {&on_loop_start, &on_loop_stop, &on_loop_idle, NULL,
+    xsp_loop_event_handler_t loop_evt_handler = {&on_loop_start, &on_loop_stop, &on_loop_idle,
                                                  &ctx};
     xsp_loop_handle_t loop = NULL;
     xsp_ws_client_event_handler_t client_evt_handler = {
