@@ -4,7 +4,7 @@
 #include "xsp_loop_events.h"
 
 #include <assert.h>
-//#include <stdlib.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/lock.h>
 #include <unistd.h>
@@ -26,6 +26,9 @@
 typedef struct xsp_loop_events {
     xsp_loop_events_config_t config;
     xsp_loop_events_event_handler_t evt_handler;
+    xsp_loop_handle_t loop;
+
+    xsp_loop_fd_watcher_handle_t fd_watcher;
 
     // Protects `queue`....
     LOCK_TYPE queue_lock;
@@ -51,7 +54,7 @@ static bool validate_config(const xsp_loop_events_config_t* config) {
         return true;
     if (config->data_size < 0)
         return false;
-    if (config->queue_size < 0)
+    if (config->queue_size <= 0)
         return false;
     // TODO(vtl): Should make sure that config->data_size * config->queue_size doesn't overflow.
     return true;
@@ -84,6 +87,34 @@ static bool event_queue_push_tail_locked(xsp_loop_events_handle_t loop_events, c
     return true;
 }
 
+static void on_loop_can_read_fd(xsp_loop_handle_t loop, void* ctx, int fd) {
+    xsp_loop_events_handle_t loop_events = (xsp_loop_events_handle_t)ctx;
+    LOCK(&loop_events->queue_lock);
+
+    // Only process the current number of events to prevent starvation.
+    int count = loop_events->queue_count;
+    assert(count > 0);
+
+    // Reset the wake FD.
+    uint64_t unused = 0;
+    int result = read(loop_events->wake_fd, &unused, sizeof(unused));
+    assert(result == 8);
+    assert((uint64_t)count == unused);
+
+    for (;;) {
+        bool success = event_queue_pop_head_locked(loop_events);
+        assert(success);
+
+        UNLOCK(&loop_events->queue_lock);
+        loop_events->evt_handler.on_loop_events_event(loop_events, loop_events->evt_handler.ctx,
+                                                      loop_events->event_data_bounce_buffer);
+        count--;
+        if (count == 0 || xsp_loop_should_stop(loop_events->loop))
+            break;
+        LOCK(&loop_events->queue_lock);
+    }
+}
+
 xsp_loop_events_handle_t xsp_loop_events_init(const xsp_loop_events_config_t* config,
                                               const xsp_loop_events_event_handler_t* evt_handler,
                                               xsp_loop_handle_t loop) {
@@ -95,57 +126,66 @@ xsp_loop_events_handle_t xsp_loop_events_init(const xsp_loop_events_config_t* co
         return NULL;
     }
 
-    xsp_loop_events_handle_t loop_events = (xsp_loop_events_handle_t)calloc(
-            1, sizeof(xsp_loop_events_t));
+    if (!evt_handler || !loop) {
+        ESP_LOGE(TAG, "Invalid argument");
+        return NULL;
+    }
+
+    xsp_loop_events_handle_t loop_events =
+            (xsp_loop_events_handle_t)calloc(1, sizeof(xsp_loop_events_t));
     if (!loop_events) {
         ESP_LOGE(TAG, "Allocation failed");
         return NULL;
     }
+    INIT_LOCK(&loop_events->queue_lock);
+    loop_events->wake_fd = -1;
 
     loop_events->config = *config;
-    if (evt_handler)
-        loop_events->evt_handler = *evt_handler;
+    loop_events->evt_handler = *evt_handler;
+    loop_events->loop = loop;
 
-    INIT_LOCK(&loop_events->queue_lock);
-    if (config->queue_size > 0) {
-        size_t size = (size_t)config->data_size * (size_t)config->queue_size;
-        if (size > 0) {
-            loop_events->queue = (char*)malloc(size);
-            if (!loop_events->queue) {
-                ESP_LOGE(TAG, "Allocation failed");
-                DEINIT_LOCK(&loop_events->queue_lock);
-                free(loop_events);
-                return NULL;
-            }
+    size_t size = (size_t)config->data_size * (size_t)config->queue_size;
+    if (size > 0) {
+        loop_events->queue = (char*)malloc(size);
+        if (!loop_events->queue) {
+            ESP_LOGE(TAG, "Allocation failed");
+            goto fail;
         }
-
-        if (config->data_size > 0) {
-            loop_events->event_data_bounce_buffer = malloc((size_t)config->data_size);
-            if (!loop_events->event_data_bounce_buffer) {
-                ESP_LOGE(TAG, "Allocation failed");
-                free(loop_events->queue);
-                DEINIT_LOCK(&loop_events->queue_lock);
-                free(loop_events);
-                return NULL;
-            }
-        }
-
-        loop_events->wake_fd = xsp_eventfd(0, XSP_EVENTFD_NONBLOCK);
-        if (loop_events->wake_fd == -1) {
-            ESP_LOGE(TAG, "Eventfd creation failed");
-            free(loop_events->event_data_bounce_buffer);
-            free(loop_events->queue);
-            DEINIT_LOCK(&loop_events->queue_lock);
-            free(loop_events);
-            return NULL;
-        }
-    } else {
-        loop_events->wake_fd = -1;
     }
 
-//FIXME add FD watcher
+    if (config->data_size > 0) {
+        loop_events->event_data_bounce_buffer = malloc((size_t)config->data_size);
+        if (!loop_events->event_data_bounce_buffer) {
+            ESP_LOGE(TAG, "Allocation failed");
+            goto fail;
+        }
+    }
+
+    loop_events->wake_fd = xsp_eventfd(0, XSP_EVENTFD_NONBLOCK);
+    if (loop_events->wake_fd == -1) {
+        ESP_LOGE(TAG, "Eventfd creation failed");
+        goto fail;
+    }
+
+    xsp_loop_fd_event_handler_t loop_fd_event_handler = {
+            NULL, NULL, on_loop_can_read_fd, loop_events, loop_events->wake_fd,
+    };
+    loop_events->fd_watcher = xsp_loop_add_fd_watcher(loop, &loop_fd_event_handler);
+    if (!loop_events->fd_watcher) {
+        ESP_LOGE(TAG, "Failed to watch FD");
+        goto fail;
+    }
 
     return loop_events;
+
+fail:
+    if (loop_events->wake_fd != -1)
+        close(loop_events->wake_fd);
+    free(loop_events->event_data_bounce_buffer);
+    free(loop_events->queue);
+    DEINIT_LOCK(&loop_events->queue_lock);
+    free(loop_events);
+    return NULL;
 }
 
 esp_err_t xsp_loop_events_cleanup(xsp_loop_events_handle_t loop_events) {
