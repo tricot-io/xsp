@@ -80,8 +80,8 @@ static bool event_queue_push_tail_locked(xsp_loop_events_handle_t loop_events, c
     if (loop_events->queue_count == loop_events->config.queue_size)
         return false;
 
-    int raw_idx = (loop_events->queue_head + loop_events->queue_count) %
-            loop_events->config.queue_size;
+    int raw_idx =
+            (loop_events->queue_head + loop_events->queue_count) % loop_events->config.queue_size;
     memcpy(event_queue_entry_locked(loop_events, raw_idx), data, loop_events->config.data_size);
     loop_events->queue_count++;
     return true;

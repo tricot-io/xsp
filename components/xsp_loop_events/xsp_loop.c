@@ -99,7 +99,7 @@ static bool event_queue_push_tail_locked(xsp_loop_handle_t loop, const void* dat
         return false;
 
     int raw_idx = (loop->event_queue_head + loop->event_queue_count) %
-            loop->config.custom_event_queue_size;
+                  loop->config.custom_event_queue_size;
     memcpy(event_queue_entry_locked(loop, raw_idx), data, loop->config.custom_event_data_size);
     loop->event_queue_count++;
     return true;
@@ -127,8 +127,8 @@ xsp_loop_handle_t xsp_loop_init(const xsp_loop_config_t* config,
 
     INIT_LOCK(&loop->event_queue_lock);
     if (config->custom_event_queue_size > 0) {
-        size_t size = (size_t)config->custom_event_data_size *
-                (size_t)config->custom_event_queue_size;
+        size_t size =
+                (size_t)config->custom_event_data_size * (size_t)config->custom_event_queue_size;
         if (size > 0) {
             loop->event_queue = (char*)malloc(size);
             if (!loop->event_queue) {

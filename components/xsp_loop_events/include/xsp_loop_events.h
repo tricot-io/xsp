@@ -40,7 +40,7 @@ xsp_loop_events_handle_t xsp_loop_events_init(const xsp_loop_events_config_t* co
 // Cleans up (shuts down) the loop events.
 esp_err_t xsp_loop_events_cleanup(xsp_loop_events_handle_t loop_events);
 
-//FIXME
+// Posts (schedules) an event with the given data.
 esp_err_t xsp_loop_events_post_event(xsp_loop_events_handle_t loop_events, const void* data);
 
 #ifdef __cplusplus
