@@ -7,6 +7,9 @@ set(COMPONENT_SRCS
 )
 
 set(COMPONENT_REQUIRES
+    xsp_eventfd
+    xsp_loop
+    xsp_loop_events
     xsp_ws_client
 )
 

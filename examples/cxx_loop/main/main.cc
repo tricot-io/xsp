@@ -14,9 +14,6 @@
 #include "xsp/loop.h"
 #include "xsp/loop_event_handler.h"
 
-//FIXME
-//#include "xsp_eventfd.h"
-
 namespace {
 
 const char TAG[] = "MAIN";
@@ -31,6 +28,15 @@ public:
     CxxLoopExampleApp& operator=(const CxxLoopExampleApp&) = delete;
 
     void Run() {
+        bool success = loop_.PostTask([this]() {
+                n_++;
+                ESP_LOGI(TAG, "First task");
+                loop_.PostTask([this]() { NthTask(); });
+        });
+        if (!success) {
+            ESP_LOGE(TAG, "Failed to post first task");
+            return;
+        }
         loop_.Run();
     }
 
@@ -39,7 +45,27 @@ public:
     void OnLoopIdle() override { ESP_LOGD(TAG, "Event: idle"); }
 
 private:
-    xsp::Loop loop_{this};
+    void PostNthTask() {
+        if (!loop_.PostTask([this]() { NthTask(); })) {
+            ESP_LOGE(TAG, "Failed to post n-th task; stopping");
+            loop_.Stop();
+        }
+    }
+
+    void NthTask() {
+        n_++;
+        ESP_LOGI(TAG, "%d-th task", n_);
+
+        if (n_ < 10) {
+            loop_.PostTask([this]() { NthTask(); });
+        } else {
+            ESP_LOGI(TAG, "Stopping loop");
+            loop_.Stop();
+        }
+    }
+
+    xsp::Loop loop_{this, 8};
+    int n_ = 0;
 };
 
 void cxx_loop_example_task(void* pvParameters) {
@@ -58,8 +84,7 @@ void cxx_loop_example_task(void* pvParameters) {
 }  // namespace
 
 extern "C" void app_main(void) {
-//FIXME
-//    xsp_eventfd_register();
+    xsp::Loop::InitEventfd();
 
     xTaskCreate(&cxx_loop_example_task, "cxx_loop_example_task", 8192, NULL, 5, NULL);
 }
