@@ -29,9 +29,9 @@ public:
 
     void Run() {
         bool success = loop_.PostTask([this]() {
-                n_++;
-                ESP_LOGI(TAG, "First task");
-                loop_.PostTask([this]() { NthTask(); });
+            n_++;
+            ESP_LOGI(TAG, "First task");
+            loop_.PostTask([this]() { NthTask(); });
         });
         if (!success) {
             ESP_LOGE(TAG, "Failed to post first task");
