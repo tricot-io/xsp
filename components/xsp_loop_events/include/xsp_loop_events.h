@@ -40,6 +40,9 @@ xsp_loop_events_handle_t xsp_loop_events_init(const xsp_loop_events_config_t* co
 // Cleans up (shuts down) the loop events.
 esp_err_t xsp_loop_events_cleanup(xsp_loop_events_handle_t loop_events);
 
+// Returns the loop for the loop events (must be initialized and not cleaned up).
+xsp_loop_handle_t xsp_loop_events_get_loop(xsp_loop_events_handle_t loop_events);
+
 // Posts (schedules) an event with the given data.
 esp_err_t xsp_loop_events_post_event(xsp_loop_events_handle_t loop_events, const void* data);
 

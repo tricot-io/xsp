@@ -204,6 +204,13 @@ esp_err_t xsp_loop_events_cleanup(xsp_loop_events_handle_t loop_events) {
     return ESP_OK;
 }
 
+xsp_loop_handle_t xsp_loop_events_get_loop(xsp_loop_events_handle_t loop_events) {
+    if (!loop_events)
+        return NULL;
+
+    return loop_events->loop;
+}
+
 esp_err_t xsp_loop_events_post_event(xsp_loop_events_handle_t loop_events, const void* data) {
     LOCK(&loop_events->queue_lock);
 
