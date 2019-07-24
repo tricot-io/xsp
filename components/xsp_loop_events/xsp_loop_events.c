@@ -192,6 +192,9 @@ esp_err_t xsp_loop_events_cleanup(xsp_loop_events_handle_t loop_events) {
     if (!loop_events)
         return ESP_FAIL;
 
+    if (loop_events->queue_count > 0)
+        ESP_LOGW(TAG, "Cleaning up with %d undispatched events", loop_events->queue_count);
+
     if (loop_events->wake_fd != -1)
         close(loop_events->wake_fd);
     free(loop_events->event_data_bounce_buffer);
