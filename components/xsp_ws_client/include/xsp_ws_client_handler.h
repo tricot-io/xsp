@@ -1,6 +1,22 @@
 // Copyright 2019 Tricot Inc.
 // Use of this source code is governed by the license in the LICENSE file.
 
+// NOTES
+//
+// *   The WS client handler receives *frames* and provides them to the user (to be defragmented
+//     into messages if desired at another layer).
+//     *   Users may not need to defragment, or may not be able to defragment.
+//     *   Users may want to set their own policy for message data allocation and storage.
+// *   It sends *messages* provided by the user (fragmenting them as required).
+//     *   This makes it easy to use.
+//     *   Note however that this precludes sending "streamed" messages (i.e., a message whose data
+//         is provided dynamically).
+// *   It receives and sends frames *synchronously*.
+//     *   This is because `xsp_ws_client` is synchronous.
+// *   It sends messages asynchronously.
+//     *   This allows larger messages to be sent without blocking, and frames to be received
+//         while doing so (for multi-frame messages).
+
 #ifndef XSP_WS_CLIENT_HANDLER_H_
 #define XSP_WS_CLIENT_HANDLER_H_
 
@@ -106,23 +122,6 @@ esp_err_t xsp_ws_client_handler_close(xsp_ws_client_handler_handle_t handler, in
 esp_err_t xsp_ws_client_handler_ping(xsp_ws_client_handler_handle_t handler,
                                      int payload_size,
                                      const void* payload);
-
-// FIXME
-// NOTES
-//
-// *   The loop receives *frames* and provides them to the user (to be defragmented into messages if
-//     desired at another layer).
-//     *   Users may not need to defragment, or may not be able to defragment.
-//     *   Users may want to set their own policy for message data allocation and storage.
-// *   It sends *messages* provided by the user (fragmenting them as required).
-//     *   This makes it easy to use.
-//     *   Note however that this precludes sending "streamed" messages (i.e., a message whose data
-//         is provided dynamically).
-// *   It receives and sends frames *synchronously*.
-//     *   This is because `xsp_ws_client` is synchronous.
-// *   It sends messages asynchronously.
-//     *   This allows larger messages to be sent without blocking, and frames to be received
-//         while doing so (for multi-frame messages).
 
 #ifdef __cplusplus
 }  // extern "C"
