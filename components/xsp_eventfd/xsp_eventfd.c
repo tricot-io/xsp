@@ -17,19 +17,20 @@
 #include "esp_vfs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/portmacro.h"
 
 #include "sdkconfig.h"
 
 // TODO(vtl): Make this a Kconfig value.
 #define MAX_NUM_EVENTFD 4
 
-#define LOCK_TYPE _lock_t
+#define LOCK_TYPE portMUX_TYPE
 
-#define INIT_LOCK(l) _lock_init(l)
-#define DEINIT_LOCK(l) _lock_close(l)
+#define INIT_LOCK(l) vPortCPUInitializeMutex(l)
+#define DEINIT_LOCK(l) do { (void)l; } while (0)
 
-#define LOCK(l) _lock_acquire(l)
-#define UNLOCK(l) _lock_release(l)
+#define LOCK(l) portENTER_CRITICAL(l)
+#define UNLOCK(l) portEXIT_CRITICAL(l)
 
 // NOTE: xsp_eventfd_ctx_t's lock precedes xsp_eventfd_t's lock in the (acquisition) order.
 
