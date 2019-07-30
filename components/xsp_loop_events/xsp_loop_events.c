@@ -6,22 +6,27 @@
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/lock.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 
 #include "xsp_eventfd.h"
 
 #include "sdkconfig.h"
 
-#define LOCK_TYPE _lock_t
+#define LOCK_TYPE portMUX_TYPE
 
-#define INIT_LOCK(l) _lock_init(l)
-#define DEINIT_LOCK(l) _lock_close(l)
+#define INIT_LOCK(l) vPortCPUInitializeMutex(l)
+#define DEINIT_LOCK(l) \
+    do {               \
+        (void)l;       \
+    } while (0)
 
-#define LOCK(l) _lock_acquire(l)
-#define UNLOCK(l) _lock_release(l)
+#define LOCK(l) portENTER_CRITICAL(l)
+#define UNLOCK(l) portEXIT_CRITICAL(l)
 
 typedef struct xsp_loop_events {
     xsp_loop_events_config_t config;
@@ -37,6 +42,7 @@ typedef struct xsp_loop_events {
     int queue_head;
     int queue_count;
     int wake_fd;
+    xsp_eventfd_handle_t wake_handle;
 
     // Only accessed from the loop task.
     void* event_data_bounce_buffer;  // Size is config.data_size.
@@ -167,6 +173,11 @@ xsp_loop_events_handle_t xsp_loop_events_init(const xsp_loop_events_config_t* co
         goto fail;
     }
 
+    if (ioctl(loop_events->wake_fd, XSP_EVENTFD_IOCTL_GET_HANDLE, &loop_events->wake_handle) != 0) {
+        ESP_LOGE(TAG, "Failed to obtain eventfd handle");
+        goto fail;
+    }
+
     xsp_loop_fd_event_handler_t loop_fd_event_handler = {
             NULL, NULL, on_loop_can_read_fd, loop_events, loop_events->wake_fd,
     };
@@ -219,9 +230,8 @@ esp_err_t xsp_loop_events_post_event(xsp_loop_events_handle_t loop_events, const
         return ESP_FAIL;
     }
 
-    uint64_t inc = 1;
-    int result = write(loop_events->wake_fd, &inc, sizeof(inc));
-    assert(result == 8);
+    bool success = xsp_eventfd_write(loop_events->wake_handle, 1);
+    assert(success);
 
     UNLOCK(&loop_events->queue_lock);
     return ESP_OK;
