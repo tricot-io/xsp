@@ -7,8 +7,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/lock.h>
@@ -30,7 +28,10 @@
 #define LOCK_TYPE portMUX_TYPE
 
 #define INIT_LOCK(l) vPortCPUInitializeMutex(l)
-#define DEINIT_LOCK(l) do { (void)l; } while (0)
+#define DEINIT_LOCK(l) \
+    do {               \
+        (void)l;       \
+    } while (0)
 
 #define LOCK(l) portENTER_CRITICAL(l)
 #define UNLOCK(l) portEXIT_CRITICAL(l)
@@ -126,7 +127,7 @@ static xsp_eventfd_t* efd_lookup(void* raw_ctx, int fd) {
     return efd;
 }
 
-static void maybe_signal_select_locked(xsp_eventfd_ctx_t* ctx) {
+static void maybe_signal_select_locked(xsp_eventfd_ctx_t* ctx, bool in_isr) {
     if (!ctx->select_signal)
         return;
 
@@ -153,16 +154,20 @@ static void maybe_signal_select_locked(xsp_eventfd_ctx_t* ctx) {
 
     if (should_signal) {
         // TODO(vtl): Calling esp_vfs_select_triggered() under ctx->lock is slightly dodgy.
-        // TODO(vtl): There's also esp_vfs_select_triggered_isr()....
-        esp_vfs_select_triggered(ctx->select_signal);
+        if (in_isr) {
+            // TODO(vtl): Possibly we should pass a "woken" argument.
+            esp_vfs_select_triggered_isr(ctx->select_signal, NULL);
+        } else {
+            esp_vfs_select_triggered(ctx->select_signal);
+        }
     }
 }
 
 // Signals select() if still appropriate.
-static void maybe_signal_select(void* raw_ctx) {
+static void maybe_signal_select(void* raw_ctx, bool in_isr) {
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->lock);
-    maybe_signal_select_locked(ctx);
+    maybe_signal_select_locked(ctx, in_isr);
     UNLOCK(&ctx->lock);
 }
 
@@ -224,7 +229,7 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
     efd_unref_locked(efd);
 
     if (select_active)
-        maybe_signal_select(raw_ctx);
+        maybe_signal_select(raw_ctx, false);
 
     return 8;
 }
@@ -277,7 +282,7 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     efd_unref_locked(efd);
 
     if (select_active)
-        maybe_signal_select(raw_ctx);
+        maybe_signal_select(raw_ctx, false);
 
     return 8;
 }
@@ -351,6 +356,36 @@ static int efd_fcntl_p(void* raw_ctx, int fd, int cmd, va_list args) {
     return rv;
 }
 
+static int efd_ioctl_p(void* raw_ctx, int fd, int cmd, va_list args) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
+    xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
+    if (!efd)
+        return -1;  // errno already set.
+
+    int rv = -1;
+    switch (cmd) {
+    case XSP_EVENTFD_IOCTL_GET_HANDLE: {
+        xsp_eventfd_handle_t* arg = va_arg(args, xsp_eventfd_handle_t*);
+        if (!arg) {
+            errno = EINVAL;
+            break;
+        }
+        *arg = efd;
+        rv = 0;
+        break;
+    }
+
+    default:
+        errno = EINVAL;
+        break;
+    }
+
+    UNLOCK(&efd->lock);
+    return rv;
+}
+
 static esp_err_t efd_start_select(int nfds,
                                   fd_set* readfds,
                                   fd_set* writefds,
@@ -397,7 +432,7 @@ static esp_err_t efd_start_select(int nfds,
         }
     }
 
-    maybe_signal_select_locked(g_eventfd_ctx);
+    maybe_signal_select_locked(g_eventfd_ctx, false);
 
     UNLOCK(&g_eventfd_ctx->lock);
     return ESP_OK;
@@ -458,6 +493,7 @@ void xsp_eventfd_register() {
             .read_p = &efd_read_p,
             .close_p = &efd_close_p,
             .fcntl_p = &efd_fcntl_p,
+            .ioctl_p = &efd_ioctl_p,
             .start_select = &efd_start_select,
             .end_select = &efd_end_select,
     };
@@ -548,4 +584,35 @@ int xsp_eventfd(unsigned initval, int flags) {
     g_eventfd_ctx->eventfds[idx].efd = efd;
     UNLOCK(&g_eventfd_ctx->lock);
     return fd;
+}
+
+bool xsp_eventfd_write(xsp_eventfd_handle_t efd, uint64_t to_add) {
+    // Assume everything is kosher if `to_add` is 0.
+    if (to_add == 0)
+        return true;
+
+    bool in_isr = !!xPortInIsrContext();
+
+    LOCK(&efd->lock);
+    if (efd->value + to_add < efd->value) {
+        UNLOCK(&efd->lock);
+        return false;
+    }
+    efd->value += to_add;
+    if (efd->inc_waiters > 0) {
+        if (in_isr) {
+            // TODO(vtl): Maybe pass pxHigherPriorityTaskWoken and wake it at the end.
+            xEventGroupSetBitsFromISR(efd->events, EFD_EVENT_INC_BIT, NULL);
+        } else {
+            xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
+        }
+    }
+
+    // We'll need to grab the global lock, so we need to release the EFD lock.
+    bool select_active = efd->select_active;
+    UNLOCK(&efd->lock);
+    if (select_active)
+        maybe_signal_select(g_eventfd_ctx, in_isr);
+
+    return true;
 }

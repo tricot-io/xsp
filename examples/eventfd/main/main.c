@@ -6,6 +6,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/ioctl.h>
 #include <sys/select.h>
 #include <sys/time.h>
 #include <unistd.h>
@@ -242,10 +243,25 @@ void app_main(void) {
 
     do_sleep(2 * 100);
 
+    printf("[TASK0] Getting handle for fd2 ...\n");
+    xsp_eventfd_handle_t h2 = NULL;
+    result = ioctl(g_fd2, XSP_EVENTFD_IOCTL_GET_HANDLE, &h2);
+    printf("[TASK0]   ioctl: result=%d, handle=%p\n", result, h2);
+
     value = 1ULL << 63;
     printf("[TASK0] Writing to fd2 (value=0x%llx) ...\n", (unsigned long long)value);
     sz = write(g_fd2, &value, sizeof(value));
     printf("[TASK0]   write: result=%d\n", (int)sz);
+
+    value = 1ULL << 62;
+    printf("[TASK0] Writing to fd2 using handle (value=0x%llx) ...\n", (unsigned long long)value);
+    bool success = xsp_eventfd_write(h2, value);
+    printf("[TASK0]   xsp_eventfd_write: result=%d\n", (int)success);
+
+    value = 1ULL << 62;
+    printf("[TASK0] Writing to fd2 using handle (value=0x%llx) ...\n", (unsigned long long)value);
+    success = xsp_eventfd_write(h2, value);
+    printf("[TASK0]   xsp_eventfd_write: result=%d\n", (int)success);
 
     printf("[TASK0] Setting fd2 flags (clear nonblocking) ...\n");
     result = fcntl(g_fd2, F_SETFL, 0);
@@ -255,7 +271,12 @@ void app_main(void) {
     result = fcntl(g_fd2, F_GETFL);
     printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
 
-    // TODO(vtl): Check that it does actually block?
+    value = 1ULL << 62;
+    printf("[TASK0] Writing to fd2 using handle (value=0x%llx) ...\n", (unsigned long long)value);
+    success = xsp_eventfd_write(h2, value);
+    printf("[TASK0]   xsp_eventfd_write: result=%d\n", (int)success);
+
+    // TODO(vtl): Check that write() does actually block?
 
     printf("[TASK0] Creating fd3 ...\n");
     g_fd3 = xsp_eventfd(0, 0);
