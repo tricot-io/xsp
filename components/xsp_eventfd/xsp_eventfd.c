@@ -9,7 +9,6 @@
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/lock.h>
 #include <sys/select.h>
 #include <unistd.h>
 
