@@ -2,6 +2,7 @@
 // Use of this source code is governed by the license in the LICENSE file.
 
 #include <errno.h>
+#include <fcntl.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -159,6 +160,10 @@ void app_main(void) {
     g_fd1 = xsp_eventfd(0, 0);
     printf("[TASK0]   fd1=%d\n", g_fd1);
 
+    printf("[TASK0] Getting fd1 flags ...\n");
+    int result = fcntl(g_fd1, F_GETFL);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
     printf("[TASK0] Creating TASK1\n");
     xTaskCreate(&task1, "TASK1", 8192, NULL, 5, NULL);
 
@@ -212,11 +217,15 @@ void app_main(void) {
     g_fd2 = xsp_eventfd(123, XSP_EVENTFD_NONBLOCK);
     printf("[TASK0]   fd2=%d\n", g_fd2);
 
+    printf("[TASK0] Getting fd2 flags ...\n");
+    result = fcntl(g_fd2, F_GETFL);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
     printf("[TASK0] Creating TASK3\n");
     xTaskCreate(&task3, "TASK3", 8192, NULL, 5, NULL);
 
     printf("[TASK0] Closing fd1 ...\n");
-    int result = close(g_fd1);
+    result = close(g_fd1);
     printf("[TASK0]   close: result=%d\n", result);
 
     do_sleep(100);
@@ -238,9 +247,32 @@ void app_main(void) {
     sz = write(g_fd2, &value, sizeof(value));
     printf("[TASK0]   write: result=%d\n", (int)sz);
 
-    printf("[TASK0] Creating fd3 (nonblocking) ...\n");
-    g_fd3 = xsp_eventfd(0, XSP_EVENTFD_NONBLOCK);
+    printf("[TASK0] Setting fd2 flags (clear nonblocking) ...\n");
+    result = fcntl(g_fd2, F_SETFL, 0);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
+    printf("[TASK0] Getting fd2 flags ...\n");
+    result = fcntl(g_fd2, F_GETFL);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
+    // TODO(vtl): Check that it does actually block?
+
+    printf("[TASK0] Creating fd3 ...\n");
+    g_fd3 = xsp_eventfd(0, 0);
     printf("[TASK0]   fd3=%d\n", g_fd3);
+
+    printf("[TASK0] Setting fd3 flags (set nonblocking) ...\n");
+    result = fcntl(g_fd3, F_SETFL, O_NONBLOCK);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
+    printf("[TASK0] Getting fd3 flags ...\n");
+    result = fcntl(g_fd3, F_GETFL);
+    printf("[TASK0]   fcntl: result=0x%x\n", (unsigned)result);
+
+    printf("[TASK0] Reading from fd3 ...\n");
+    value = (uint64_t)-1;
+    sz = read(g_fd3, &value, sizeof(value));
+    printf("[TASK0]   read: result=%d, errno=%d\n", (int)sz, errno);
 
     do_sleep(3 * 100);
 

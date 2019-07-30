@@ -5,12 +5,15 @@
 
 #include <assert.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/lock.h>
 #include <sys/select.h>
+#include <unistd.h>
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -314,6 +317,40 @@ static int efd_close_p(void* raw_ctx, int fd) {
     return 0;
 }
 
+static int efd_fcntl_p(void* raw_ctx, int fd, int cmd, va_list args) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
+    xsp_eventfd_t* efd = efd_lookup(raw_ctx, fd);
+    if (!efd)
+        return -1;  // errno already set.
+
+    int rv = -1;
+    switch (cmd) {
+    case F_GETFL:
+        // If nonblocking, fail; else block.
+        rv = 0;
+        if (efd->nonblock)
+            rv |= O_NONBLOCK;
+        break;
+
+    case F_SETFL: {
+        int arg = va_arg(args, int);
+        efd->nonblock = !!(arg & O_NONBLOCK);
+        // TODO(vtl): Check for unsupported flags?
+        rv = 0;
+        break;
+    }
+
+    default:
+        errno = ENOSYS;
+        break;
+    }
+
+    UNLOCK(&efd->lock);
+    return rv;
+}
+
 static esp_err_t efd_start_select(int nfds,
                                   fd_set* readfds,
                                   fd_set* writefds,
@@ -420,6 +457,7 @@ void xsp_eventfd_register() {
             .write_p = &efd_write_p,
             .read_p = &efd_read_p,
             .close_p = &efd_close_p,
+            .fcntl_p = &efd_fcntl_p,
             .start_select = &efd_start_select,
             .end_select = &efd_end_select,
     };
