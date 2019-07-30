@@ -17,6 +17,7 @@
 #include "esp_vfs.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
+#include "freertos/portable.h"
 
 #include "sdkconfig.h"
 
@@ -184,15 +185,14 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
         return -1;  // errno already set.
     efd_ref_locked(efd);
 
+    bool in_isr = !!xPortInIsrContext();
     while (efd->value + to_add < efd->value) {
-        // Overflow. If nonblocking, fail; else block.
-        if (efd->nonblock) {
+        // Overflow. If nonblocking or in ISR, fail; else block.
+        if (efd->nonblock || in_isr) {
             efd_unref_locked(efd);
             errno = EAGAIN;
             return -1;
         }
-
-        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
 
         efd->dec_waiters++;
         UNLOCK(&efd->lock);
@@ -211,8 +211,16 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
 
     efd->value += to_add;
 
-    if (efd->inc_waiters > 0)
-        xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
+    if (efd->inc_waiters > 0) {
+        if (in_isr) {
+            // TODO(vtl): Not sure if should pass a `pxHigherPriorityTaskWoken` argument, and yield
+            // if it gets set to true. (Possibly we should, but then we'd have to do it after
+            // releasing the lock, etc.)
+            xEventGroupSetBitsFromISR(efd->events, EFD_EVENT_INC_BIT, NULL);
+        } else {
+            xEventGroupSetBits(efd->events, EFD_EVENT_INC_BIT);
+        }
+    }
 
     // We'll need to grab the global lock, so we need to release the EFD lock.
     bool select_active = efd->select_active;
@@ -235,15 +243,14 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
         return -1;  // errno already set.
     efd_ref_locked(efd);
 
+    bool in_isr = !!xPortInIsrContext();
     while (efd->value == 0) {
-        // If nonblocking, fail; else block.
-        if (efd->nonblock) {
+        // If nonblocking or in ISR, fail; else block.
+        if (efd->nonblock || in_isr) {
             efd_unref_locked(efd);
             errno = EAGAIN;
             return -1;
         }
-
-        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
 
         efd->inc_waiters++;
         UNLOCK(&efd->lock);
@@ -263,8 +270,14 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
     memcpy(buf, &efd->value, 8);
     efd->value = 0;
 
-    if (efd->dec_waiters > 0)
-        xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT);
+    if (efd->dec_waiters > 0) {
+        if (in_isr) {
+            // TODO(vtl): See corresponding TODO in `efd_write_p()`.
+            xEventGroupSetBitsFromISR(efd->events, EFD_EVENT_DEC_BIT, NULL);
+        } else {
+            xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT);
+        }
+    }
 
     // We'll need to grab the global lock, so we need to release the EFD lock.
     bool select_active = efd->select_active;
@@ -298,6 +311,7 @@ static int efd_close_p(void* raw_ctx, int fd) {
     UNLOCK(&ctx->lock);
 
     efd->closed = true;
+    // TODO(vtl): Not sure if we can/should make this work from ISRs.
     xEventGroupSetBits(efd->events, EFD_EVENT_DEC_BIT | EFD_EVENT_INC_BIT);
 
     if (efd->select_active)
