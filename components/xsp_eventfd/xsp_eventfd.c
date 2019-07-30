@@ -163,6 +163,9 @@ static void maybe_signal_select(void* raw_ctx) {
 }
 
 static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
     if (count < 8) {
         errno = EINVAL;
         return -1;
@@ -191,8 +194,6 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
             errno = EAGAIN;
             return -1;
         }
-
-        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
 
         efd->dec_waiters++;
         UNLOCK(&efd->lock);
@@ -225,6 +226,9 @@ static ssize_t efd_write_p(void* raw_ctx, int fd, const void* buf, size_t count)
 }
 
 static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
     if (count < 8) {
         errno = EINVAL;
         return -1;
@@ -242,8 +246,6 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
             errno = EAGAIN;
             return -1;
         }
-
-        // TODO(vtl): Check for ISR context; presumably blocking probably not allowed there.
 
         efd->inc_waiters++;
         UNLOCK(&efd->lock);
@@ -277,6 +279,9 @@ static ssize_t efd_read_p(void* raw_ctx, int fd, void* buf, size_t count) {
 }
 
 static int efd_close_p(void* raw_ctx, int fd) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
     xsp_eventfd_ctx_t* ctx = (xsp_eventfd_ctx_t*)raw_ctx;
     LOCK(&ctx->lock);
 
@@ -313,6 +318,9 @@ static esp_err_t efd_start_select(int nfds,
                                   fd_set* writefds,
                                   fd_set* exceptfds,
                                   SemaphoreHandle_t* signal_sem) {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
     if (!g_eventfd_ctx)
         return ESP_ERR_INVALID_STATE;  // TODO(vtl): This can't happen, I think?
     if (!signal_sem)
@@ -358,6 +366,9 @@ static esp_err_t efd_start_select(int nfds,
 }
 
 static void efd_end_select() {
+    // Shouldn't get here from an ISR, since the VFS isn't ISR-safe.
+    assert(!xPortInIsrContext());
+
     assert(g_eventfd_ctx);
 
     LOCK(&g_eventfd_ctx->lock);
