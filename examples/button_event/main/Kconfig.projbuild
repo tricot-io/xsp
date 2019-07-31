@@ -1,0 +1,21 @@
+# Copyright 2019 Tricot Inc.
+# Use of this source code is governed by the license in the LICENSE file.
+
+menu "Button event example configuration"
+
+config BUTTON_GPIO_NUM
+    int "Button GPIO number (default: 0)"
+    default 0
+    range 0 39
+    help
+        The GPIO number of the button (0-39, except 20, 24, 28-31).
+
+config BUTTON_ACTIVE
+    int "Button GPIO active low or high (default: 0=low)."
+    default 0
+    range 0 1
+    help
+        Whether the GPIO is low (0) or high (1) when the button is active/depressed.
+        (Pull-up/pull-down and edge interrupt will be configured accordingly.)
+
+endmenu
