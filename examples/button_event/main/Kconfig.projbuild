@@ -18,4 +18,12 @@ config BUTTON_ACTIVE
         Whether the GPIO is low (0) or high (1) when the button is active/depressed.
         (Pull-up/pull-down and edge interrupt will be configured accordingly.)
 
+config BUTTON_EVENT_ON_ACTIVE
+    int "Generate an event when the button is pressed (default: 0=released)."
+    default 0
+    range 0 1
+    help
+        Whether the event is generated when the GPIO becomes active (i.e., the button is depressed).
+        (Interrupt edge will be configured accordingly.)
+
 endmenu

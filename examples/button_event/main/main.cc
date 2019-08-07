@@ -41,7 +41,8 @@ public:
                     GPIO_MODE_INPUT,
                     CONFIG_BUTTON_ACTIVE ? GPIO_PULLUP_DISABLE : GPIO_PULLUP_ENABLE,
                     CONFIG_BUTTON_ACTIVE ? GPIO_PULLDOWN_ENABLE : GPIO_PULLDOWN_DISABLE,
-                    CONFIG_BUTTON_ACTIVE ? GPIO_INTR_NEGEDGE : GPIO_INTR_POSEDGE,
+                    (CONFIG_BUTTON_ACTIVE ^ CONFIG_BUTTON_EVENT_ON_ACTIVE) ? GPIO_INTR_NEGEDGE
+                                                                           : GPIO_INTR_POSEDGE,
             };
             ESP_ERROR_CHECK(gpio_config(&kGpioConfig));
         });
@@ -58,7 +59,7 @@ private:
         static_cast<ButtonEventExampleApp*>(thiz)->OnButtonIsr();
     }
     void OnButtonIsr() {
-        loop_.PostTask([this]() { ESP_LOGI(TAG, "Button released"); });
+        loop_.PostTask([this]() { ESP_LOGI(TAG, "Button event"); });
     }
 
     xsp::Loop loop_{this, 8};
