@@ -93,4 +93,4 @@ esp_err_t xsp_loop_remove_fd_watcher(xsp_loop_handle_t loop,
 }  // extern "C"
 #endif
 
-#endif  // XSP_WS_CLIENT_LOOP_H_
+#endif  // XSP_LOOP_H_

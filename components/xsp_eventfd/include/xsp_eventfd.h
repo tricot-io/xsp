@@ -35,4 +35,4 @@ bool xsp_eventfd_write(xsp_eventfd_handle_t efd, uint64_t to_add);
 }  // extern "C"
 #endif
 
-#endif  // XSP_WS_CLIENT_EVENTFD_H_
+#endif  // XSP_EVENTFD_H_

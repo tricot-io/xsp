@@ -50,4 +50,4 @@ esp_err_t xsp_loop_events_post_event(xsp_loop_events_handle_t loop_events, const
 }  // extern "C"
 #endif
 
-#endif  // XSP_WS_CLIENT_LOOP_EVENTS_H_
+#endif  // XSP_LOOP_EVENTS_H_
