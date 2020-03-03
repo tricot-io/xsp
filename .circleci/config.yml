@@ -5,7 +5,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: tricot/build-public-circleci:2.1.2
+      - image: tricot/build-public-circleci:2.2.0
 
     working_directory: ~/xsp
 
